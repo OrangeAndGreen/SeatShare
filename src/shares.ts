@@ -2,7 +2,21 @@
 
 export type Party = "D" | "R" | "O";
 export type Counts = Record<Party, number>;
-export type Office = "house" | "president";
+export type Office = "house" | "senate" | "president";
+
+export const OFFICES: { value: Office; text: string }[] = [
+  { value: "house", text: "US House" },
+  { value: "senate", text: "US Senate" },
+  { value: "president", text: "President" },
+];
+
+export function isOffice(v: string | undefined): v is Office {
+  return OFFICES.some((o) => o.value === v);
+}
+
+export function officeName(office: Office): string {
+  return OFFICES.find((o) => o.value === office)!.text;
+}
 
 export interface StateInfo {
   po: string;
@@ -10,10 +24,18 @@ export interface StateInfo {
   fips: string;
 }
 
+export interface SenateRace {
+  winner: string;
+  party: Party;
+  special: boolean;
+}
+
 export interface StateResult {
   votes: Counts;
   seats: Counts;
   uncontested?: number;
+  /** Senate only: the races that year, two when there was a special. */
+  races?: SenateRace[];
 }
 
 export interface District {

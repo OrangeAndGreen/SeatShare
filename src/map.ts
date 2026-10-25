@@ -18,6 +18,12 @@ export const COLOR_BY: { value: ColorBy; text: string }[] = [
 
 const EXTENT: Record<ColorBy, number> = { votes: 0.5, seats: 1, gap: 0.3, seatGap: 4 };
 
+/** Where the colour scale tops out. A Senate state has one or two seats up, so its gap
+ * in seats is under one. */
+export function extent(by: ColorBy, office: Office): number {
+  return by === "seatGap" && office === "senate" ? 1 : EXTENT[by];
+}
+
 const topo = us as unknown as Topology<{ states: GeometryCollection<{ name: string }> }>;
 const states = feature(topo, topo.objects.states).features;
 
@@ -37,8 +43,9 @@ function valueText(row: Row, by: ColorBy): string {
 
 export function legendText(by: ColorBy, office: Office): [string, string] {
   if (by === "seatGap") {
-    const unit = office === "house" ? "seats" : "electors";
-    return [`R +${EXTENT[by]} ${unit} or more`, `D +${EXTENT[by]}`];
+    const unit = office !== "president" ? "seats" : "electors";
+    const e = extent(by, office);
+    return [`R +${e} ${e === 1 ? unit.replace(/s$/, "") : unit} or more`, `D +${e}`];
   }
   const e = EXTENT[by] * 100;
   return by === "gap"
@@ -47,7 +54,7 @@ export function legendText(by: ColorBy, office: Office): [string, string] {
 }
 
 export function tipHtml(row: Row, office: Office): string {
-  const seatWord = office === "house" ? "Seats" : "Electors";
+  const seatWord = office !== "president" ? "Seats" : "Electors";
   const lines = [
     ["Votes", `D ${pct(row.voteShare.D)} · R ${pct(row.voteShare.R)}`],
     [seatWord, formatSeats(row.seats) || "-"],
@@ -70,7 +77,8 @@ export function drawMap(
   const byFips = new Map<string, Row>();
   for (const r of rows) if (fipsOf[r.po]) byFips.set(fipsOf[r.po], r);
 
-  const color = divergingScale(EXTENT[by]);
+  const e = extent(by, office);
+  const color = divergingScale(e);
   const path = d3.geoPath();
   container.replaceChildren();
 
@@ -80,6 +88,17 @@ export function drawMap(
     .attr("role", "img")
     .attr("aria-label", `Map of states coloured by ${COLOR_BY.find((c) => c.value === by)!.text.toLowerCase()}`);
 
+  // States with no result that year (most Senate years) are hatched, so they can't be
+  // mistaken for an even result.
+  svg.append("defs").append("pattern")
+    .attr("id", "no-race").attr("patternUnits", "userSpaceOnUse")
+    .attr("width", 6).attr("height", 6).attr("patternTransform", "rotate(45)")
+    .call((pat) => {
+      pat.append("rect").attr("width", 6).attr("height", 6).attr("fill", "var(--bg)");
+      pat.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 6)
+        .attr("stroke", "var(--line)").attr("stroke-width", 3);
+    });
+
   svg.append("g").selectAll("path")
     .data(states)
     .join("path")
@@ -87,7 +106,7 @@ export function drawMap(
     .attr("d", path)
     .attr("fill", (f) => {
       const r = byFips.get(String(f.id));
-      return r ? color(value(r, by)) : "var(--line)";
+      return r ? color(value(r, by)) : "url(#no-race)";
     })
     .attr("tabindex", (f) => (byFips.has(String(f.id)) ? 0 : null))
     .attr("aria-label", (f) => {
@@ -115,7 +134,7 @@ export function drawMap(
     });
 
   const [lo, hi] = legendText(by, office);
-  const ramp = d3.range(0, 1.0001, 0.1).map((t) => color(-EXTENT[by] + t * 2 * EXTENT[by]));
+  const ramp = d3.range(0, 1.0001, 0.1).map((t) => color(-e + t * 2 * e));
   const legend = document.createElement("div");
   legend.className = "legend";
   legend.innerHTML = `<span>${lo}</span><span class="ramp" style="background:linear-gradient(90deg,${ramp.join(",")})"></span><span>${hi}</span>`;

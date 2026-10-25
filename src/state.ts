@@ -3,24 +3,30 @@
 
 import * as d3 from "d3";
 import {
-  formatGap, formatSeatGap, formatSeats, makeRow, pct, shares, type District, type Row, type StateInfo, type Summary,
+  formatGap, formatSeatGap, formatSeats, makeRow, pct, shares,
+  type District, type Row, type SenateRace, type StateInfo, type Summary,
 } from "./shares";
 import { cssVar, escapeHtml, hideTip, partyColor, select, showTip } from "./ui";
 
 interface YearPoint {
   year: number;
   house?: Row;
+  senate?: Row;
+  senateRaces?: SenateRace[];
   president?: Row;
 }
 
 export function yearPoints(summary: Summary, po: string): YearPoint[] {
-  const years = new Set([...summary.offices.house, ...summary.offices.president]);
+  const years = new Set([...summary.offices.house, ...summary.offices.senate, ...summary.offices.president]);
   return [...years].sort((a, b) => a - b).map((year) => {
     const h = summary.results.house[year]?.[po];
+    const s = summary.results.senate[year]?.[po];
     const p = summary.results.president[year]?.[po];
     return {
       year,
       house: h ? makeRow(po, "", h) : undefined,
+      senate: s ? makeRow(po, "", s) : undefined,
+      senateRaces: s?.races,
       president: p ? makeRow(po, "", p) : undefined,
     };
   });
@@ -43,7 +49,7 @@ export function drawState(
     <p class="note"><a href="#/trends?area=${state.po}">See ${escapeHtml(state.name)} over time</a></p>
     <h2>Democratic share of votes and seats</h2>
     <p class="note">Each year: the share of the House vote won by Democrats and the share of House seats they took,
-      joined by a line. Presidential vote share is shown for comparison. Republicans are roughly the rest.</p>
+      joined by a line. Senate and presidential vote shares are shown for comparison. Republicans are roughly the rest.</p>
     <div class="series-key"></div>
     <div class="chart-box"></div>
     <h2>Every election</h2>
@@ -79,6 +85,7 @@ function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[]): voi
   key.innerHTML = [
     `<span><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="${dem}"/></svg>House votes</span>`,
     `<span><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="${surface}" stroke="${dem}" stroke-width="2"/></svg>House seats</span>`,
+    `<span><svg width="12" height="12"><path d="M6 1.5L11 10.5H1Z" fill="${surface}" stroke="${ink}" stroke-width="1.5"/></svg>Senate votes</span>`,
     `<span><svg width="12" height="12"><rect x="2" y="2" width="8" height="8" fill="${ink}" transform="rotate(45 6 6)"/></svg>President votes</span>`,
   ].join("");
 
@@ -89,7 +96,7 @@ function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[]): voi
     .attr("class", "chart")
     .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("role", "img")
-    .attr("aria-label", "Democratic share of House votes, House seats and presidential votes by year");
+    .attr("aria-label", "Democratic share of House votes, House seats, Senate votes and presidential votes by year");
 
   svg.append("g").attr("class", "grid")
     .selectAll("line").data([0, 0.25, 0.75, 1]).join("line")
@@ -118,6 +125,10 @@ function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[]): voi
   g.selectAll("circle.seats").data(house).join("circle")
     .attr("cx", (p) => x(p.year)!).attr("cy", (p) => y(p.house!.seatShare.D))
     .attr("r", 4.5).attr("fill", surface).attr("stroke", dem).attr("stroke-width", 2);
+  g.selectAll("path.senate").data(points.filter((p) => p.senate)).join("path")
+    .attr("d", "M0,-5L5,4H-5Z")
+    .attr("transform", (p) => `translate(${x(p.year)},${y(p.senate!.voteShare.D)})`)
+    .attr("fill", surface).attr("stroke", ink).attr("stroke-width", 1.5);
   g.selectAll("rect.pres").data(points.filter((p) => p.president)).join("rect")
     .attr("x", -4).attr("y", -4).attr("width", 8).attr("height", 8)
     .attr("transform", (p) => `translate(${x(p.year)},${y(p.president!.voteShare.D)}) rotate(45)`)
@@ -140,10 +151,21 @@ function yearTip(p: YearPoint): string {
     rows.push(["House seats", formatSeats(p.house.seats)]);
     rows.push(["Seat gap", `${formatGap(p.house.gap)} pts · ${formatSeatGap(p.house.seatGap)} seats`]);
   }
+  if (p.senate) {
+    rows.push(["Senate votes", `D ${pct(p.senate.voteShare.D)} · R ${pct(p.senate.voteShare.R)}`]);
+    rows.push(["Senate", senateWinners(p.senateRaces)]);
+  }
   if (p.president) {
     rows.push(["President", `D ${pct(p.president.voteShare.D)} · R ${pct(p.president.voteShare.R)}`]);
   }
   return `<b>${p.year}</b>` + rows.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join("");
+}
+
+/** "Jon Ossoff (D); Raphael Warnock (D, special)". */
+export function senateWinners(races: SenateRace[] | undefined): string {
+  return (races ?? [])
+    .map((r) => `${r.winner} (${r.party === "O" ? "Ind" : r.party}${r.special ? ", special" : ""})`)
+    .join("; ");
 }
 
 function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): void {
@@ -160,6 +182,8 @@ function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): voi
       <td>${cell(p.house, (r) => formatGap(r.gap))}</td>
       <td>${cell(p.house, (r) => formatSeatGap(r.seatGap))}</td>
       <td>${cell(p.house, (r) => (r.uncontested ? String(r.uncontested) : ""))}</td>
+      <td>${cell(p.senate, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
+      <td style="text-align:left">${cell(p.senate, () => escapeHtml(senateWinners(p.senateRaces)))}</td>
       <td>${cell(p.president, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
       <td>${cell(p.president, (r) => `${formatSeats(r.seats)} <span class="muted">${escapeHtml(presWinner)}</span>`)}</td>
     </tr>`;
@@ -167,6 +191,7 @@ function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): voi
   box.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th scope="col">Year</th><th scope="col">House votes D / R</th><th scope="col">House seats</th>
       <th scope="col">Gap, points</th><th scope="col">Gap, seats</th><th scope="col">Uncontested</th>
+      <th scope="col">Senate D / R</th><th scope="col" style="text-align:left">Senate winner</th>
       <th scope="col">President D / R</th><th scope="col">Electors</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }

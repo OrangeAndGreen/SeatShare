@@ -7,7 +7,7 @@ const summary: Summary = {
     { po: "VT", name: "Vermont", fips: "50" },
     { po: "NC", name: "North Carolina", fips: "37" },
   ],
-  offices: { house: [2000, 2002, 2004], president: [2000, 2004] },
+  offices: { house: [2000, 2002, 2004], senate: [2000, 2002], president: [2000, 2004] },
   nominees: {},
   source: "",
   results: {
@@ -22,6 +22,21 @@ const summary: Summary = {
       2004: {
         VT: { votes: { D: 20, R: 30, O: 50 }, seats: { D: 0, R: 0, O: 1 } },
         NC: { votes: { D: 48, R: 52, O: 0 }, seats: { D: 6, R: 7, O: 0 } },
+      },
+    },
+    senate: {
+      2000: {
+        NC: {
+          votes: { D: 90, R: 110, O: 0 },
+          seats: { D: 0, R: 2, O: 0 },
+          races: [
+            { winner: "A", party: "R", special: false },
+            { winner: "B", party: "R", special: true },
+          ],
+        },
+      },
+      2002: {
+        VT: { votes: { D: 10, R: 40, O: 50 }, seats: { D: 0, R: 0, O: 1 } },
       },
     },
     president: { 2000: {}, 2004: {} },
@@ -40,6 +55,18 @@ describe("trendPoints", () => {
   });
   it("keeps to the range, either way round", () => {
     expect(trendPoints(summary, "house", "NC", 2004, 2002).map((p) => p.year)).toEqual([2002, 2004]);
+  });
+});
+
+describe("senate", () => {
+  it("counts a regular and a special race as two seats", () => {
+    const [nc] = trendPoints(summary, "senate", "NC", 2000, 2002);
+    expect(nc.row.totalSeats).toBe(2);
+    expect(gapValue(nc.row, "seatGap")).toBeCloseTo(-0.9);
+  });
+  it("adds up only the states with a race", () => {
+    const points = trendPoints(summary, "senate", "US", 2000, 2002);
+    expect(points.map((p) => p.row.totalSeats)).toEqual([2, 1]);
   });
 });
 

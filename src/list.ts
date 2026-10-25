@@ -60,10 +60,10 @@ export function drawList(
   sort: ListState,
   onSort: (s: ListState) => void,
 ): void {
-  const seatsLabel = office === "house" ? "Seats" : "Electors";
+  const seatsLabel = office !== "president" ? "Seats" : "Electors";
   const sorted = sortRows(rows, sort.key, sort.descending);
   const head = COLUMNS.map((c) => {
-    const label = c.key === "seats" ? seatsLabel : c.label.replace(/seats$/, office === "house" ? "seats" : "electors");
+    const label = c.key === "seats" ? seatsLabel : c.label.replace(/seats$/, office !== "president" ? "seats" : "electors");
     const aria = c.key === sort.key ? (sort.descending ? "descending" : "ascending") : "none";
     return `<th scope="col" aria-sort="${aria}"><button data-key="${c.key}">${label}</button></th>`;
   }).join("") + `<th scope="col">Split</th>`;

@@ -2,17 +2,12 @@ import "./style.css";
 import { drawList, SORT_KEYS, type ListState } from "./list";
 import { COLOR_BY, drawMap, type ColorBy } from "./map";
 import {
-  buildRows, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
+  buildRows, isOffice, OFFICES, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
 } from "./shares";
 import { drawState } from "./state";
 import { METRICS, type Metric } from "./trend-data";
 import { drawTrends, type TrendState } from "./trends";
 import { escapeHtml, select } from "./ui";
-
-const OFFICES: { value: Office; text: string }[] = [
-  { value: "house", text: "US House" },
-  { value: "president", text: "President" },
-];
 
 const app = document.getElementById("app")!;
 const tabs = document.getElementById("tabs")!;
@@ -64,7 +59,7 @@ function readHash(): Route {
   if (parts[0] === "state" && parts[1]) {
     return { view: "state", po: parts[1].toUpperCase(), year: parts[2] ? Number(parts[2]) : undefined };
   }
-  if (parts[0] === "house" || parts[0] === "president") office = parts[0];
+  if (isOffice(parts[0])) office = parts[0];
   const years = summary.offices[office];
   const y = Number(parts[1]);
   year = years.includes(y) ? y : years.includes(year) ? year : years[years.length - 1];
@@ -77,8 +72,8 @@ function readHash(): Route {
 }
 
 function readTrendParams(params: URLSearchParams): void {
-  const o = params.get("office");
-  if (o === "house" || o === "president") trend.office = o;
+  const o = params.get("office") ?? undefined;
+  if (isOffice(o)) trend.office = o;
   const area = params.get("area")?.toUpperCase();
   if (area && (area === NATIONAL || summary.states.some((s) => s.po === area))) trend.area = area;
   const metric = params.get("metric");
@@ -127,7 +122,7 @@ function renderOverview(): void {
   const rows = buildRows(summary.states, results);
   const national = nationalRow(rows);
   const fips = Object.fromEntries(summary.states.map((s) => [s.po, s.fips]));
-  const seatWord = office === "house" ? "seats" : "electoral votes";
+  const seatWord = office !== "president" ? "seats" : "electoral votes";
   const nominees = summary.nominees[year] ?? {};
 
   app.replaceChildren();
@@ -168,16 +163,20 @@ function renderOverview(): void {
     ? `Seat gap in ${seatWord}: how many more ${seatWord} a party won than a split in proportion to the vote would give it. `
     : colorBy === "gap"
       ? `Seat gap in points: how far a party's share of ${seatWord} ran ahead of its share of the vote. `
-      : "") + "Click a state for its history.";
+      : "") + (office === "senate" ? "Hatched states had no Senate race that year. " : "")
+    + "Click a state for its history.";
   const mapBox = document.createElement("div");
   mapBox.className = "map-wrap";
 
   const listHead = document.createElement("div");
-  listHead.innerHTML = `<h2>Vote share against ${office === "house" ? "seat" : "elector"} share</h2>
+  listHead.innerHTML = `<h2>Vote share against ${office !== "president" ? "seat" : "elector"} share</h2>
     <p class="note">Sort by any column; the gaps sort by size, whichever party they favour. The gap in points is
     half the difference between the two parties' over- or under-representation. The gap in ${seatWord} is that times
     the state's ${seatWord}: how many a party won beyond a split in proportion to the vote.${office === "president"
-      ? " Electors go almost entirely to the statewide winner, so every state's gap is large." : ""}</p>`;
+      ? " Electors go almost entirely to the statewide winner, so every state's gap is large."
+      : office === "senate"
+        ? " Only states with a race that year are listed. With one seat up, the winner takes it all, so a state's gap is large; the national row is where Senate gaps mean most."
+        : ""}</p>`;
   const listBox = document.createElement("div");
 
   app.append(controls, headline, mapHead, mapControls, mapNote, mapBox, listHead, listBox);

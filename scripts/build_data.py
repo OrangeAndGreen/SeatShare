@@ -4,7 +4,8 @@ Raw files go in data/raw/ (not committed):
   1976-2024-house.tab      US House 1976-2024, doi:10.7910/DVN/IG0UN2
                            (behind a guestbook form, so download it by hand)
   1976-2024-president.csv  President 1976-2024, doi:10.7910/DVN/42MVDX
-                           (downloaded automatically when missing)
+  1976-2024-senate.csv     US Senate 1976-2024, doi:10.7910/DVN/PEJ5QU
+                           (these two are downloaded automatically when missing)
 
 Writes public/data/summary.json (every state, office and year at state level)
 and public/data/house/<year>.json (district results).
@@ -27,6 +28,8 @@ OUT = ROOT / "public" / "data"
 HOUSE_FILE = RAW / "1976-2024-house.tab"
 PRESIDENT_FILE = RAW / "1976-2024-president.csv"
 PRESIDENT_URL = "https://dataverse.harvard.edu/api/access/datafile/13887042"
+SENATE_FILE = RAW / "1976-2024-senate.csv"
+SENATE_URL = "https://dataverse.harvard.edu/api/access/datafile/13887039"
 HOUSE_PAGE = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/IG0UN2"
 
 D, R, O = "D", "R", "O"
@@ -132,23 +135,103 @@ def house_contests(rows):
             first = [r for r in seat_rows if r["runoff"] != "TRUE"]
         if not first:
             continue
-        candidates = tally_candidates(first, "party")
-        if not candidates:
-            continue
-        deciding = tally_candidates(runoff, "party") if runoff else candidates
-        winner = deciding[0]
-        real = {r["candidate"] for r in first
-                if r["writein"] != "TRUE" and r["party"] not in ("NA", "")}
-        votes = empty_counts()
-        for _, party, v in candidates:
-            votes[party] += v
-        contests[key] = {
-            "district": key[2],
-            "winner": winner[0].title(),
-            "party": winner[1],
-            "votes": votes,
-            "uncontested": len(real) <= 1,
-        }
+        contest = decide(first, runoff, "party", party_of)
+        if contest:
+            contests[key] = dict(district=key[2], **contest)
+    return contests
+
+
+def decide(first, runoff, party_field, label_to_party):
+    """Votes from the first round; the winner from the runoff where there was one."""
+    candidates = tally_candidates(first, party_field, label_to_party)
+    if not candidates:
+        return None
+    deciding = tally_candidates(runoff, party_field, label_to_party) if runoff else candidates
+    winner = deciding[0]
+    real = {r["candidate"] for r in first
+            if r["writein"].upper() != "TRUE" and r[party_field] not in ("NA", "")}
+    votes = empty_counts()
+    for _, party, v in candidates:
+        votes[party] += v
+    return {
+        "winner": winner[0].title(),
+        "party": winner[1],
+        "votes": votes,
+        "uncontested": len(real) <= 1,
+    }
+
+
+def simplified_party(label):
+    return {"DEMOCRAT": D, "REPUBLICAN": R}.get(label.upper(), O)
+
+
+# Rows in the Senate file that are wrong, by (year, state, candidate, votes as given):
+# the rows to use instead, as (stage, votes).
+SENATE_FIXES = {
+    # The top two carry their December runoff votes with a stray leading 1.
+    # Their November votes bring the race to the reported turnout.
+    (2014, "LA", "BILL CASSIDY", 1712379): [("GEN", 603048), ("RUNOFF", 712379)],
+    (2014, "LA", "MARY L. LANDRIEU", 1561210): [("GEN", 619402), ("RUNOFF", 561210)],
+    # Both rounds are filed as "gen"; these are the December runoff rows.
+    (2002, "LA", "MARY L. LANDRIEU", 638654): [("RUNOFF", 638654)],
+    (2002, "LA", "SUZANNE HAIK TERRELL", 596642): [("RUNOFF", 596642)],
+}
+
+# Senate candidates filed with no party at all.
+SENATE_PARTIES = {
+    (2020, "WY", "CYNTHIA M. LUMMIS"): R,
+    (2020, "WY", "MERAV BEN DAVID"): D,
+    (2020, "NE", "PRESTON LOVE JR."): D,  # Democratic write-in
+    (2022, "AK", "MURKOWSKI, LISA"): R,
+    (2022, "AK", "TSHIBAKA, KELLY C."): R,
+    (2022, "AK", "KELLEY, BUZZ A."): R,
+    (2022, "AK", "CHESBRO, PATRICIA R."): D,
+}
+
+
+def senate_label(row, year):
+    """The party label to read a Senate row by: the detailed party where it names
+    a major party, else the simplified one (which misses some), else the fixes."""
+    fixed = SENATE_PARTIES.get((year, row["state_po"], row["candidate"]))
+    if fixed:
+        return "DEMOCRAT" if fixed == D else "REPUBLICAN"
+    if party_of(row["party_detailed"]) != O:
+        return row["party_detailed"]
+    if simplified_party(row["party_simplified"]) != O:
+        return row["party_simplified"]
+    return row["party_detailed"]
+
+
+def senate_contests(rows):
+    """One contest per (election year, state, special), so a state can have two.
+
+    Stages differ by year. Georgia files its November round as "pre" and the
+    runoff as "gen" in 1992 and 2008, as "gen runoff" in 2022, and the January
+    2021 runoffs under 2021, which belong to the 2020 election.
+    """
+    by_race = defaultdict(list)
+    for row in rows:
+        year = int(row["year"])
+        row = dict(row, stage=row["stage"].upper(), party_detailed=senate_label(row, year))
+        fix = SENATE_FIXES.get((year, row["state_po"], row["candidate"], to_int(row["candidatevotes"])))
+        fixed = [dict(row, stage=stage, candidatevotes=str(v)) for stage, v in fix] if fix else [row]
+        if year % 2:
+            year -= 1
+        special = row["special"].upper() == "TRUE"
+        by_race[(year, row["state_po"], special)].extend(fixed)
+
+    contests = {}
+    for key, race_rows in by_race.items():
+        stages = {r["stage"] for r in race_rows}
+        if "PRE" in stages:
+            first = [r for r in race_rows if r["stage"] == "PRE"]
+            runoff = [r for r in race_rows if r["stage"] == "GEN"]
+        else:
+            first = [r for r in race_rows if r["stage"] == "GEN"]
+            runoff = [r for r in race_rows if "RUNOFF" in r["stage"]]
+        contest = decide(first, runoff, "party_detailed", party_of)
+        if contest:
+            contests[key] = dict(special=key[2], **contest)
     return contests
 
 
@@ -158,10 +241,8 @@ def president_results(rows):
     for row in rows:
         by_state[(int(row["year"]), row["state_po"])].append(row)
     out = {}
-    simplified = {"DEMOCRAT": D, "REPUBLICAN": R}
     for key, state_rows in by_state.items():
-        candidates = tally_candidates(
-            state_rows, "party_simplified", lambda l: simplified.get(l.upper(), O))
+        candidates = tally_candidates(state_rows, "party_simplified", simplified_party)
         votes = empty_counts()
         names = {}
         for name, party, v in candidates:
@@ -186,12 +267,18 @@ def winner_of(votes):
     return max(votes, key=votes.get)
 
 
+NAME_SUFFIXES = {"JR", "SR", "II", "III", "IV"}
+
+
 def display_name(raw):
-    """'CARTER, JIMMY' -> 'Jimmy Carter'."""
+    """'CARTER, JIMMY' -> 'Jimmy Carter'; 'BYRD, HARRY F., JR.' and
+    'HARRY F. BYRD, JR.' -> 'Harry F. Byrd Jr.'."""
     raw = raw.replace('\\"', '"').replace('""', '"')
-    if "," in raw:
-        last, first = raw.split(",", 1)
-        raw = f"{first.strip()} {last.strip()}"
+    parts = [part.strip() for part in raw.split(",")]
+    suffix = [parts.pop()] if len(parts) > 1 and parts[-1].upper().rstrip(".") in NAME_SUFFIXES else []
+    if len(parts) == 2:
+        parts = [parts[1], parts[0]]
+    raw = " ".join(parts + suffix)
     return " ".join(w.capitalize() if not w.startswith('"') else '"' + w[1:].capitalize()
                     for w in raw.split())
 
@@ -200,16 +287,17 @@ def state_name(raw):
     return " ".join(w if w == "of" else w.capitalize() for w in raw.lower().split())
 
 
-def read_csv(path):
+def read_csv(path, dialect="excel"):
     with open(path, encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f))
+        return list(csv.DictReader(f, dialect=dialect))
 
 
 def ensure_raw():
     RAW.mkdir(parents=True, exist_ok=True)
-    if not PRESIDENT_FILE.exists():
-        print(f"Downloading {PRESIDENT_FILE.name}")
-        urllib.request.urlretrieve(PRESIDENT_URL, PRESIDENT_FILE)
+    for path, url in ((PRESIDENT_FILE, PRESIDENT_URL), (SENATE_FILE, SENATE_URL)):
+        if not path.exists():
+            print(f"Downloading {path.name}")
+            urllib.request.urlretrieve(url, path)
     if not HOUSE_FILE.exists():
         sys.exit(f"Missing {HOUSE_FILE}.\nDownload 1976-2024-house.tab from {HOUSE_PAGE}\n"
                  f"(it asks for a guestbook form) and save it in {RAW}.")
@@ -219,6 +307,7 @@ def build():
     ensure_raw()
     house_rows = read_csv(HOUSE_FILE)
     pres_rows = read_csv(PRESIDENT_FILE)
+    senate_rows = read_csv(SENATE_FILE, dialect="excel-tab")  # tab-separated despite the name
 
     states = {}
     for row in house_rows + pres_rows:
@@ -242,14 +331,23 @@ def build():
     seats_in = {key: sum(h["seats"].values()) for key, h in house.items()}
     pres = president_results(pres_rows)
 
-    summary = {"house": {}, "president": {}}
+    summary = {"house": {}, "senate": {}, "president": {}}
     for (year, state), h in sorted(house.items()):
         summary["house"].setdefault(str(year), {})[state] = {
             "votes": h["votes"], "seats": h["seats"], "uncontested": h["uncontested"]}
+    # A state with a regular and a special race in one year adds both.
+    for (year, state, _), c in sorted(senate_contests(senate_rows).items()):
+        s = summary["senate"].setdefault(str(year), {}).setdefault(state, {
+            "votes": empty_counts(), "seats": empty_counts(), "uncontested": 0, "races": []})
+        for p in (D, R, O):
+            s["votes"][p] += c["votes"][p]
+        s["seats"][c["party"]] += 1
+        s["uncontested"] += c["uncontested"]
+        s["races"].append({"winner": display_name(c["winner"]), "party": c["party"],
+                           "special": c["special"]})
     candidates = {}
     for (year, state), p in sorted(pres.items()):
-        win = winner_of({k: v for k, v in p["votes"].items() if k != O}) \
-            if p["votes"][O] < max(p["votes"][D], p["votes"][R]) else winner_of(p["votes"])
+        win = winner_of(p["votes"])
         summary["president"].setdefault(str(year), {})[state] = {
             "votes": p["votes"],
             "seats": electoral_votes(seats_in.get((year, state), 0), year, state, win),
@@ -266,6 +364,7 @@ def build():
         "states": sorted(states.values(), key=lambda s: s["name"]),
         "offices": {
             "house": sorted(int(y) for y in summary["house"]),
+            "senate": sorted(int(y) for y in summary["senate"]),
             "president": sorted(int(y) for y in summary["president"]),
         },
         "nominees": nominees,

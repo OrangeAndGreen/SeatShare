@@ -2,7 +2,7 @@
 
 import * as d3 from "d3";
 import {
-  formatGap, formatSeatGap, formatSeats, NATIONAL, pct, type Office, type Party, type Row, type Summary,
+  formatGap, formatSeatGap, formatSeats, NATIONAL, OFFICES, officeName, pct, type Office, type Party, type Row, type Summary,
 } from "./shares";
 import {
   clampRange, gapValue, METRICS, PER_PARTY, partiesShown, partyValue, trendPoints, type Metric, type TrendPoint,
@@ -16,11 +16,6 @@ export interface TrendState {
   from: number;
   to: number;
 }
-
-const OFFICES: { value: Office; text: string }[] = [
-  { value: "house", text: "US House" },
-  { value: "president", text: "President" },
-];
 
 const PARTY_NAME: Record<Party, string> = { D: "Democrats", R: "Republicans", O: "Other" };
 
@@ -70,7 +65,7 @@ export function drawTrends(
   );
 
   const head = document.createElement("div");
-  head.innerHTML = `<h2>${escapeHtml(metricText)}: ${escapeHtml(areaName)}, ${st.office === "house" ? "US House" : "President"}, ${from}-${to}</h2>
+  head.innerHTML = `<h2>${escapeHtml(metricText)}: ${escapeHtml(areaName)}, ${officeName(st.office)}, ${from}-${to}</h2>
     <p class="note">${note(st.metric, st.office)}</p>`;
   const key = document.createElement("div");
   key.className = "series-key";
@@ -89,7 +84,7 @@ export function drawTrends(
 }
 
 function note(metric: Metric, office: Office): string {
-  const seats = office === "house" ? "seats" : "electoral votes";
+  const seats = office !== "president" ? "seats" : "electoral votes";
   switch (metric) {
     case "seatGap":
       return `How many more ${seats} a party won than a split in proportion to its vote would give it. Bars above the line favour Democrats, below favour Republicans.`;
@@ -100,7 +95,7 @@ function note(metric: Metric, office: Office): string {
     case "seatShare":
       return `Each party's share of the ${seats}.`;
     case "seats":
-      return `${office === "house" ? "Seats" : "Electoral votes"} won by each party.`;
+      return `${office !== "president" ? "Seats" : "Electoral votes"} won by each party.`;
     case "split":
       return `How the ${seats} divided between the parties.`;
   }
@@ -236,10 +231,10 @@ function roundedBar(x: number, w: number, y0: number, y1: number): string {
 
 function tipHtml(p: TrendPoint, office: Office): string {
   const r = p.row;
-  const seats = office === "house" ? "seats" : "electors";
+  const seats = office !== "president" ? "seats" : "electors";
   const rows: [string, string][] = [
     ["Votes", `D ${pct(r.voteShare.D)} · R ${pct(r.voteShare.R)}`],
-    [office === "house" ? "Seats" : "Electors", formatSeats(r.seats) || "-"],
+    [office !== "president" ? "Seats" : "Electors", formatSeats(r.seats) || "-"],
     ["Seat share", `D ${pct(r.seatShare.D)} · R ${pct(r.seatShare.R)}`],
     ["Seat gap", `${formatGap(r.gap)} pts · ${formatSeatGap(r.seatGap)} ${seats}`],
   ];
@@ -247,20 +242,20 @@ function tipHtml(p: TrendPoint, office: Office): string {
 }
 
 function drawTable(box: HTMLElement, points: TrendPoint[], office: Office): void {
-  const seats = office === "house" ? "seats" : "electors";
+  const seats = office !== "president" ? "seats" : "electors";
   const line = (year: number, r: Row) => `<tr>
     <td>${year}</td>
     <td>${pct(r.voteShare.D)}</td><td>${pct(r.voteShare.R)}</td>
     <td>${pct(r.seatShare.D)}</td><td>${pct(r.seatShare.R)}</td>
     <td>${formatSeats(r.seats)}</td>
     <td>${formatGap(r.gap)}</td><td>${formatSeatGap(r.seatGap)}</td>
-    ${office === "house" ? `<td>${r.uncontested || ""}</td>` : ""}
+    ${office !== "president" ? `<td>${r.uncontested || ""}</td>` : ""}
   </tr>`;
   box.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th scope="col">Year</th><th scope="col">D votes</th><th scope="col">R votes</th>
       <th scope="col">D ${seats}</th><th scope="col">R ${seats}</th><th scope="col">Split</th>
       <th scope="col">Gap, points</th><th scope="col">Gap, ${seats}</th>
-      ${office === "house" ? `<th scope="col">Uncontested</th>` : ""}</tr></thead>
+      ${office !== "president" ? `<th scope="col">Uncontested</th>` : ""}</tr></thead>
     <tbody>${[...points].reverse().map((p) => line(p.year, p.row)).join("")}</tbody></table></div>`;
 }
 

@@ -68,6 +68,58 @@ class HouseContestTest(unittest.TestCase):
         self.assertTrue(b.house_contests(rows)[(2024, "NY", 1)]["uncontested"])
 
 
+def senate_row(candidate, party, votes, year="2008", state="GA", stage="gen", special="False",
+               simplified=None, writein="False"):
+    return {"candidate": candidate, "party_detailed": party, "candidatevotes": f"{votes}.0",
+            "party_simplified": simplified if simplified is not None else party,
+            "year": year, "state_po": state, "stage": stage, "special": special, "writein": writein}
+
+
+class SenateTest(unittest.TestCase):
+    def test_pre_round_counts_and_gen_round_decides(self):
+        rows = [senate_row("MARTIN", "DEMOCRAT", 1757, stage="pre"),
+                senate_row("CHAMBLISS", "REPUBLICAN", 1867, stage="pre"),
+                senate_row("BUCKLEY", "LIBERTARIAN", 128, stage="pre"),
+                senate_row("MARTIN", "DEMOCRAT", 910),
+                senate_row("CHAMBLISS", "REPUBLICAN", 1228)]
+        c = b.senate_contests(rows)[(2008, "GA", False)]
+        self.assertEqual(c["party"], "R")
+        self.assertEqual(c["votes"], {"D": 1757, "R": 1867, "O": 128})
+
+    def test_odd_year_runoff_belongs_to_the_election_before(self):
+        rows = [senate_row("WARNOCK", "DEMOCRAT", 1617, year="2020", special="True"),
+                senate_row("LOEFFLER", "REPUBLICAN", 1273, year="2020", special="True"),
+                senate_row("COLLINS", "REPUBLICAN", 980, year="2020", special="True"),
+                senate_row("WARNOCK", "DEMOCRAT", 2289, year="2021", stage="runoff", special="True"),
+                senate_row("LOEFFLER", "REPUBLICAN", 2195, year="2021", stage="runoff", special="True")]
+        contests = b.senate_contests(rows)
+        self.assertEqual(list(contests), [(2020, "GA", True)])
+        self.assertEqual(contests[(2020, "GA", True)]["votes"], {"D": 1617, "R": 2253, "O": 0})
+
+    def test_regular_and_special_are_separate_races(self):
+        rows = [senate_row("A", "DEMOCRAT", 10, year="2024", state="NE"),
+                senate_row("B", "REPUBLICAN", 20, year="2024", state="NE", special="TRUE")]
+        self.assertEqual(len(b.senate_contests(rows)), 2)
+
+    def test_party_from_detailed_label_then_fixes(self):
+        rows = [senate_row("TAMMY DUCKWORTH", "DEMOCRATIC", 2329, year="2022", state="IL",
+                           stage="GEN", simplified="OTHER"),
+                senate_row("KATHY SALVI", "REPUBLICAN", 1701, year="2022", state="IL", stage="GEN")]
+        self.assertEqual(b.senate_contests(rows)[(2022, "IL", False)]["party"], "D")
+        wy = [senate_row("CYNTHIA M. LUMMIS", "", 198100, year="2020", state="WY", simplified="OTHER"),
+              senate_row("MERAV BEN DAVID", "", 72766, year="2020", state="WY", simplified="OTHER")]
+        c = b.senate_contests(wy)[(2020, "WY", False)]
+        self.assertEqual((c["party"], c["votes"]), ("R", {"D": 72766, "R": 198100, "O": 0}))
+
+    def test_fixed_rows_split_into_rounds(self):
+        rows = [senate_row("BILL CASSIDY", "REPUBLICAN", 1712379, year="2014", state="LA"),
+                senate_row("MARY L. LANDRIEU", "DEMOCRAT", 1561210, year="2014", state="LA"),
+                senate_row("ROB MANESS", "REPUBLICAN", 202556, year="2014", state="LA")]
+        c = b.senate_contests(rows)[(2014, "LA", False)]
+        self.assertEqual(c["winner"], "Bill Cassidy")
+        self.assertEqual(c["votes"]["D"], 619402)
+
+
 class ElectorsTest(unittest.TestCase):
     def test_winner_take_all(self):
         self.assertEqual(b.electoral_votes(9, 2024, "MA", "D"), {"D": 11, "R": 0, "O": 0})
@@ -81,6 +133,9 @@ class NamesTest(unittest.TestCase):
     def test_display_name(self):
         self.assertEqual(b.display_name("CARTER, JIMMY"), "Jimmy Carter")
         self.assertEqual(b.display_name("TRUMP, DONALD J."), "Donald J. Trump")
+        self.assertEqual(b.display_name("BYRD, HARRY F., JR."), "Harry F. Byrd Jr.")
+        self.assertEqual(b.display_name("Angus S. King, Jr."), "Angus S. King Jr.")
+        self.assertEqual(b.display_name("BERNIE SANDERS"), "Bernie Sanders")
 
     def test_state_name(self):
         self.assertEqual(b.state_name("DISTRICT OF COLUMBIA"), "District of Columbia")
