@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Summary } from "./shares";
-import { clampRange, gapValue, partiesShown, partyValue, trendPoints } from "./trend-data";
+import {
+  clampRange, compareSeries, formatOffices, gapValue, isCompareMetric, parseOffices, partiesShown, partyValue, trendPoints,
+  trendYears,
+} from "./trend-data";
 
 const summary: Summary = {
   states: [
@@ -110,5 +113,37 @@ describe("clampRange", () => {
   it("orders and clamps", () => {
     expect(clampRange(years, 2030, 1970)).toEqual([1976, 2024]);
     expect(clampRange(years, 1980, 1976)).toEqual([1976, 1980]);
+  });
+});
+
+describe("comparing offices", () => {
+  it("draws each office's years, leaving out state legislatures with mostly no votes", () => {
+    const series = compareSeries(summary, ["house", "statehouse"], "NC", "voteShare", 2000, 2004);
+    expect(series.map((s) => s.office)).toEqual(["house", "statehouse"]);
+    expect(series[0].points.map((p) => [p.year, p.value])).toEqual([[2000, 0.5], [2002, 0.45], [2004, 0.48]]);
+    expect(series[1].points).toEqual([]);
+  });
+  it("keeps the seat share where the votes are missing", () => {
+    const [nc] = compareSeries(summary, ["statehouse"], "NC", "seatShare", 2002, 2002);
+    expect(nc.points[0].value).toBeCloseTo(50 / 120);
+  });
+  it("gives the gap in points, + for Democrats", () => {
+    const [vt] = compareSeries(summary, ["statehouse"], "VT", "gap", 2002, 2002);
+    expect(vt.points[0].value).toBeCloseTo((0.6 - 0.6 - (0.4 - 0.4)) / 2);
+  });
+  it("only offers metrics that don't depend on an office's size", () => {
+    expect(isCompareMetric("gap")).toBe(true);
+    expect(isCompareMetric("seatGap")).toBe(false);
+    expect(isCompareMetric("split")).toBe(false);
+  });
+  it("takes the years of every office compared", () => {
+    expect(trendYears(summary, "compare", ["senate", "president"])).toEqual([2000, 2002, 2004]);
+    expect(trendYears(summary, "statehouse", ["house"])).toEqual([2002]);
+  });
+  it("reads and writes the office list, all of them by default", () => {
+    expect(parseOffices(null)).toEqual(["house", "senate", "president", "statehouse", "statesenate"]);
+    expect(parseOffices("statesenate,house,bogus")).toEqual(["house", "statesenate"]);
+    expect(formatOffices(["house", "statesenate"])).toBe("house,statesenate");
+    expect(formatOffices(parseOffices(""))).toBe("");
   });
 });

@@ -4,13 +4,17 @@ import * as d3 from "d3";
 import {
   formatGap, formatSeatGap, formatSeats, NATIONAL, OFFICES, officeName, pct, type Office, type Party, type Row, type Summary,
 } from "./shares";
+import { drawCompare, officeSwatch } from "./compare";
 import {
-  clampRange, gapValue, METRICS, PER_PARTY, partiesShown, partyValue, trendPoints, type Metric, type TrendPoint,
+  clampRange, COMPARE, COMPARE_METRICS, compareSeries, gapValue, isCompareMetric, METRICS, PER_PARTY, partiesShown,
+  partyValue, trendPoints, trendYears, type Metric, type TrendOffice, type TrendPoint,
 } from "./trend-data";
 import { cssVar, escapeHtml, hideTip, partyColor, select, showTip } from "./ui";
 
 export interface TrendState {
-  office: Office;
+  office: TrendOffice;
+  /** The offices drawn when comparing. */
+  offices: Office[];
   area: string;
   metric: Metric;
   from: number;
@@ -27,9 +31,12 @@ const PRESIDENT_LABEL: Partial<Record<Metric, string>> = {
   split: "Elector split",
 };
 
-function metricLabel(metric: Metric, office: Office): string {
+function metricLabel(metric: Metric, office: TrendOffice): string {
+  if (office === COMPARE) return COMPARE_METRICS.find((m) => m.value === metric)!.text;
   return (office === "president" && PRESIDENT_LABEL[metric]) || METRICS.find((m) => m.value === metric)!.text;
 }
+
+const OFFICE_OPTIONS: { value: TrendOffice; text: string }[] = [...OFFICES, { value: COMPARE, text: "Compare offices" }];
 
 export function drawTrends(
   container: HTMLElement,
@@ -37,13 +44,13 @@ export function drawTrends(
   st: TrendState,
   onChange: (st: TrendState) => void,
 ): void {
-  const years = summary.offices[st.office];
+  const years = trendYears(summary, st.office, st.offices);
   const [from, to] = clampRange(years, st.from, st.to);
-  const points = trendPoints(summary, st.office, st.area, from, to);
   const areaName = st.area === NATIONAL
     ? "United States"
     : summary.states.find((s) => s.po === st.area)?.name ?? st.area;
-  const metrics = METRICS.map((m) => ({ value: m.value, text: metricLabel(m.value, st.office) }));
+  const metrics = (st.office === COMPARE ? COMPARE_METRICS : METRICS)
+    .map((m) => ({ value: m.value, text: metricLabel(m.value, st.office) }));
   const metricText = metricLabel(st.metric, st.office);
 
   container.replaceChildren();
@@ -53,34 +60,85 @@ export function drawTrends(
   const areas = [{ value: NATIONAL, text: "United States" },
     ...summary.states.map((s) => ({ value: s.po, text: s.name }))];
   controls.append(
-    select("Office", OFFICES, st.office, (office) => {
-      const ys = summary.offices[office];
+    select("Office", OFFICE_OPTIONS, st.office, (office) => {
+      const ys = trendYears(summary, office, st.offices);
       const [f, t] = clampRange(ys, nearest(ys, from), nearest(ys, to));
-      onChange({ ...st, office, from: f, to: t });
+      const metric = office === COMPARE && !isCompareMetric(st.metric) ? "gap" : st.metric;
+      onChange({ ...st, office, metric, from: f, to: t });
     }),
     select("Area", areas, st.area, (area) => onChange({ ...st, area })),
     select("Metric", metrics, st.metric, (metric) => onChange({ ...st, metric })),
     select("From", yearOptions, String(from), (v) => onChange({ ...st, from: Number(v), to })),
     select("To", yearOptions, String(to), (v) => onChange({ ...st, from, to: Number(v) })),
   );
+  container.append(controls);
+  if (st.office === COMPARE) container.append(officeChecks(st, onChange));
 
+  const officeText = st.office === COMPARE ? "offices compared" : officeName(st.office);
   const head = document.createElement("div");
-  head.innerHTML = `<h2>${escapeHtml(metricText)}: ${escapeHtml(areaName)}, ${officeName(st.office)}, ${from}-${to}</h2>
-    <p class="note">${note(st.metric, st.office)}</p>`;
+  head.innerHTML = `<h2>${escapeHtml(metricText)}: ${escapeHtml(areaName)}, ${officeText}, ${from}-${to}</h2>
+    <p class="note">${st.office === COMPARE ? compareNote(st.metric) : note(st.metric, st.office)}</p>`;
   const key = document.createElement("div");
   key.className = "series-key";
   const chartBox = document.createElement("div");
   const tableHead = document.createElement("h2");
   tableHead.textContent = "The numbers";
   const tableBox = document.createElement("div");
-  container.append(controls, head, key, chartBox, tableHead, tableBox);
+  container.append(head, key, chartBox, tableHead, tableBox);
 
+  if (st.office === COMPARE) {
+    const series = compareSeries(summary, st.offices, st.area, st.metric, from, to);
+    const shown = years.filter((y) => y >= from && y <= to && series.some((s) => s.points.some((p) => p.year === y)));
+    if (!shown.length) {
+      chartBox.innerHTML = `<p class="note">No results for ${escapeHtml(areaName)} in these years.</p>`;
+      return;
+    }
+    drawCompare(chartBox, tableBox, series, st.metric, shown);
+    return;
+  }
+
+  const points = trendPoints(summary, st.office, st.area, from, to);
   if (!points.length) {
     chartBox.innerHTML = `<p class="note">No results for ${escapeHtml(areaName)} in these years.</p>`;
     return;
   }
   drawChart(chartBox, key, points, st.metric, st.office);
   drawTable(tableBox, points, st.office);
+}
+
+/** A checkbox per office; the last one checked can't be cleared. */
+function officeChecks(st: TrendState, onChange: (st: TrendState) => void): HTMLElement {
+  const box = document.createElement("fieldset");
+  box.className = "office-checks";
+  box.innerHTML = `<legend>Offices</legend>`;
+  for (const o of OFFICES) {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = st.offices.includes(o.value);
+    input.disabled = input.checked && st.offices.length === 1;
+    input.addEventListener("change", () => {
+      const offices = OFFICES.map((x) => x.value)
+        .filter((v) => (v === o.value ? input.checked : st.offices.includes(v)));
+      onChange({ ...st, offices });
+    });
+    label.append(input);
+    label.insertAdjacentHTML("beforeend", `${officeSwatch(o.value)}${o.text}`);
+    box.append(label);
+  }
+  return box;
+}
+
+function compareNote(metric: Metric): string {
+  const missing = " A state legislature is left out of a year when most of its seats had no votes recorded.";
+  switch (metric) {
+    case "gap":
+      return "How far each office's share of seats ran ahead of its share of the vote, in percentage points. Above the line favours Democrats, below favours Republicans." + missing;
+    case "voteShare":
+      return "The Democratic share of all votes cast for each office." + missing;
+    default:
+      return "The Democratic share of each office's seats, or of the electors for President. State senates with staggered terms count only the seats up that year.";
+  }
 }
 
 function note(metric: Metric, office: Office): string {

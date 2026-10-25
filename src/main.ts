@@ -5,7 +5,9 @@ import {
   buildRows, isLegislature, isOffice, OFFICES, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
 } from "./shares";
 import { drawState, isChartChamber, type ChartChamber } from "./state";
-import { METRICS, type Metric } from "./trend-data";
+import {
+  COMPARE, formatOffices, isCompareMetric, METRICS, parseOffices, trendYears, type Metric,
+} from "./trend-data";
 import { drawTrends, type TrendState } from "./trends";
 import { escapeHtml, select } from "./ui";
 
@@ -23,7 +25,7 @@ let year = 2024;
 let colorBy: ColorBy = "seatGap";
 let sort: ListState = { key: "seatGap", descending: true };
 let chartChamber: ChartChamber = "house";
-let trend: TrendState = { office: "house", area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
+let trend: TrendState = { office: "house", offices: parseOffices(null), area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
 
 function loadDistricts(y: number): Promise<Record<string, District[]>> {
   if (!districtCache.has(y)) {
@@ -40,7 +42,9 @@ function overviewHash(): string {
 }
 
 function trendHash(t: TrendState): string {
-  return `#/trends?office=${t.office}&area=${t.area}&metric=${t.metric}&from=${t.from}&to=${t.to}`;
+  const offices = t.office === COMPARE ? formatOffices(t.offices) : "";
+  return `#/trends?office=${t.office}${offices ? `&offices=${offices}` : ""}&area=${t.area}&metric=${t.metric}`
+    + `&from=${t.from}&to=${t.to}`;
 }
 
 function go(hash: string): void {
@@ -76,12 +80,14 @@ function readHash(): Route {
 
 function readTrendParams(params: URLSearchParams): void {
   const o = params.get("office") ?? undefined;
-  if (isOffice(o)) trend.office = o;
+  if (isOffice(o) || o === COMPARE) trend.office = o;
+  trend.offices = parseOffices(params.get("offices"));
   const area = params.get("area")?.toUpperCase();
   if (area && (area === NATIONAL || summary.states.some((s) => s.po === area))) trend.area = area;
   const metric = params.get("metric");
   if (metric && METRICS.some((m) => m.value === metric)) trend.metric = metric as Metric;
-  const years = summary.offices[trend.office];
+  if (trend.office === COMPARE && !isCompareMetric(trend.metric)) trend.metric = "gap";
+  const years = trendYears(summary, trend.office, trend.offices);
   const from = Number(params.get("from"));
   const to = Number(params.get("to"));
   trend.from = years.includes(from) ? from : years.includes(trend.from) ? trend.from : years[0];

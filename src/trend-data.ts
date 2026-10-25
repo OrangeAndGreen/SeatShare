@@ -1,7 +1,7 @@
 // Results across elections for the "Over time" tab. Pure functions, no DOM.
 
 import {
-  buildRows, makeRow, nationalRow, NATIONAL, PARTIES, type Office, type Party, type Row, type Summary,
+  buildRows, makeRow, nationalRow, NATIONAL, OFFICES, PARTIES, votesUnreliable, type Office, type Party, type Row, type Summary,
 } from "./shares";
 
 export type Metric = "seats" | "voteShare" | "seatShare" | "gap" | "seatGap" | "split";
@@ -67,4 +67,64 @@ export function clampRange(years: number[], from: number, to: number): [number, 
   const lo = Math.max(first, Math.min(from, to));
   const hi = Math.min(last, Math.max(from, to));
   return lo <= hi ? [lo, hi] : [first, last];
+}
+
+// Comparing offices: one line per office for a metric that doesn't depend on its size.
+
+export const COMPARE = "compare";
+export type TrendOffice = Office | typeof COMPARE;
+
+export const COMPARE_METRICS: { value: Metric; text: string }[] = [
+  { value: "gap", text: "Seat gap, in points" },
+  { value: "voteShare", text: "Democratic vote share" },
+  { value: "seatShare", text: "Democratic seat share" },
+];
+
+export function isCompareMetric(metric: Metric): boolean {
+  return COMPARE_METRICS.some((m) => m.value === metric);
+}
+
+/** The years with a result for any of the offices, in order. */
+export function trendYears(summary: Summary, office: TrendOffice, offices: Office[]): number[] {
+  if (office !== COMPARE) return summary.offices[office];
+  return [...new Set(offices.flatMap((o) => summary.offices[o]))].sort((a, b) => a - b);
+}
+
+/** An office's value in a comparison, or none when it rests on votes mostly missing. */
+export function compareValue(row: Row, metric: Metric): number | undefined {
+  if (metric === "seatShare") return row.seatShare.D;
+  if (votesUnreliable(row)) return undefined;
+  return metric === "voteShare" ? row.voteShare.D : row.gap;
+}
+
+export interface CompareSeries {
+  office: Office;
+  points: { year: number; value: number; row: Row }[];
+}
+
+/** One series per office, each with the years it has a value. */
+export function compareSeries(
+  summary: Summary, offices: Office[], area: string, metric: Metric, from: number, to: number,
+): CompareSeries[] {
+  return offices.map((office) => ({
+    office,
+    points: trendPoints(summary, office, area, from, to).flatMap((p) => {
+      const value = compareValue(p.row, metric);
+      return value === undefined ? [] : [{ year: p.year, value, row: p.row }];
+    }),
+  }));
+}
+
+const ALL_OFFICES: Office[] = OFFICES.map((o) => o.value);
+
+/** The offices named in a URL, in menu order; all of them when none are named. */
+export function parseOffices(param: string | null): Office[] {
+  const named = new Set((param ?? "").split(","));
+  const offices = ALL_OFFICES.filter((o) => named.has(o));
+  return offices.length ? offices : ALL_OFFICES;
+}
+
+/** The URL form of an office list: empty when it is all of them. */
+export function formatOffices(offices: Office[]): string {
+  return offices.length === ALL_OFFICES.length ? "" : offices.join(",");
 }

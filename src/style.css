@@ -12,6 +12,11 @@
   --rep-strong: #a32b2b;
   --ind: #8a8984;
   --focus: #2a78d6;
+  --office-house: #6250d6;
+  --office-senate: #eb6834;
+  --office-president: #1baf7a;
+  --office-statehouse: #eda100;
+  --office-statesenate: #e87ba4;
   color-scheme: light;
 }
 
@@ -30,6 +35,11 @@
     --rep-strong: #f2a3a3;
     --ind: #9c9b94;
     --focus: #86b6ef;
+    --office-house: #9085e9;
+    --office-senate: #d95926;
+    --office-president: #199e70;
+    --office-statehouse: #c98500;
+    --office-statesenate: #d55181;
     color-scheme: dark;
   }
 }
@@ -48,6 +58,11 @@
   --rep-strong: #f2a3a3;
   --ind: #9c9b94;
   --focus: #86b6ef;
+  --office-house: #9085e9;
+  --office-senate: #d95926;
+  --office-president: #199e70;
+  --office-statehouse: #c98500;
+  --office-statesenate: #d55181;
   color-scheme: dark;
 }
 
@@ -148,6 +163,36 @@ main,
   gap: 2px;
   font-size: 12px;
   color: var(--text-2);
+}
+
+.office-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  border: 0;
+  padding: 0;
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.office-checks legend {
+  float: left;
+  margin-right: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.office-checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.office-checks input {
+  margin: 0;
+  accent-color: var(--focus);
 }
 
 select {
