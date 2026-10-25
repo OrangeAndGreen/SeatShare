@@ -1,0 +1,170 @@
+import "./style.css";
+import { drawList, type ListState } from "./list";
+import { COLOR_BY, drawMap, type ColorBy } from "./map";
+import {
+  buildRows, formatGap, formatSeats, nationalRow, pct, type District, type Office, type Row, type Summary,
+} from "./shares";
+import { drawState } from "./state";
+import { escapeHtml, select } from "./ui";
+
+const OFFICES: { value: Office; text: string }[] = [
+  { value: "house", text: "US House" },
+  { value: "president", text: "President" },
+];
+
+const app = document.getElementById("app")!;
+const dataUrl = (path: string) => `${import.meta.env.BASE_URL}data/${path}`;
+
+let summary: Summary;
+const districtCache = new Map<number, Promise<Record<string, District[]>>>();
+
+// View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024
+let office: Office = "house";
+let year = 2024;
+let colorBy: ColorBy = "gap";
+let sort: ListState = { key: "absGap", descending: true };
+
+function loadDistricts(y: number): Promise<Record<string, District[]>> {
+  if (!districtCache.has(y)) {
+    districtCache.set(y, fetch(dataUrl(`house/${y}.json`)).then((r) => {
+      if (!r.ok) throw new Error(r.statusText);
+      return r.json();
+    }));
+  }
+  return districtCache.get(y)!;
+}
+
+function overviewHash(): string {
+  return `#/${office}/${year}?by=${colorBy}&sort=${sort.key}-${sort.descending ? "desc" : "asc"}`;
+}
+
+function go(hash: string): void {
+  if (location.hash === hash) render();
+  else location.hash = hash;
+}
+
+function readHash(): { view: "overview" } | { view: "state"; po: string; year?: number } {
+  const [path, query = ""] = location.hash.replace(/^#\/?/, "").split("?");
+  const parts = path.split("/").filter(Boolean);
+  if (parts[0] === "state" && parts[1]) {
+    return { view: "state", po: parts[1].toUpperCase(), year: parts[2] ? Number(parts[2]) : undefined };
+  }
+  if (parts[0] === "house" || parts[0] === "president") office = parts[0];
+  const years = summary.offices[office];
+  const y = Number(parts[1]);
+  year = years.includes(y) ? y : years.includes(year) ? year : years[years.length - 1];
+  const params = new URLSearchParams(query);
+  const by = params.get("by");
+  if (by && COLOR_BY.some((c) => c.value === by)) colorBy = by as ColorBy;
+  const s = params.get("sort")?.match(/^(\w+)-(asc|desc)$/);
+  if (s) sort = { key: s[1] as ListState["key"], descending: s[2] === "desc" };
+  return { view: "overview" };
+}
+
+function render(): void {
+  const route = readHash();
+  if (route.view === "state") {
+    const state = summary.states.find((s) => s.po === route.po);
+    if (!state) {
+      app.innerHTML = `<p class="error">No state "${escapeHtml(route.po)}". <a href="#/">All states</a></p>`;
+      return;
+    }
+    document.title = `${state.name} - SeatShare`;
+    const houseYears = summary.offices.house;
+    drawState(app, summary, state, route.year ?? houseYears[houseYears.length - 1], loadDistricts,
+      (y) => go(`#/state/${state.po}/${y}`));
+    window.scrollTo(0, 0);
+    return;
+  }
+  document.title = "SeatShare";
+  renderOverview();
+}
+
+function renderOverview(): void {
+  const results = summary.results[office][year] ?? {};
+  const rows = buildRows(summary.states, results);
+  const national = nationalRow(rows);
+  const fips = Object.fromEntries(summary.states.map((s) => [s.po, s.fips]));
+  const seatWord = office === "house" ? "seats" : "electoral votes";
+  const nominees = summary.nominees[year] ?? {};
+
+  app.replaceChildren();
+  const controls = document.createElement("div");
+  controls.className = "controls";
+  controls.append(
+    select("Office", OFFICES, office, (v) => {
+      office = v;
+      if (!summary.offices[office].includes(year)) year = nearest(summary.offices[office], year);
+      go(overviewHash());
+    }),
+    select("Year", [...summary.offices[office]].reverse().map((y) => ({ value: String(y), text: String(y) })),
+      String(year), (v) => { year = Number(v); go(overviewHash()); }),
+  );
+
+  const headline = document.createElement("div");
+  headline.className = "headline";
+  const names = office === "president" && nominees.D
+    ? `<div class="s">${escapeHtml(nominees.D)} (D) · ${escapeHtml(nominees.R ?? "")} (R)</div>` : "";
+  headline.innerHTML = `
+    <div class="stat"><div class="k">Share of the vote</div>
+      <div class="v">D ${pct(national.voteShare.D)} · R ${pct(national.voteShare.R)}</div>${names}</div>
+    <div class="stat"><div class="k">Share of ${seatWord}</div>
+      <div class="v">D ${pct(national.seatShare.D)} · R ${pct(national.seatShare.R)}</div>
+      <div class="s">${formatSeats(national.seats)} of ${national.totalSeats}</div></div>
+    <div class="stat"><div class="k">Seat gap, nationally</div>
+      <div class="v">${formatGap(national.gap)}</div>
+      <div class="s">points of ${seatWord} beyond vote share</div></div>`;
+
+  const mapHead = document.createElement("div");
+  mapHead.innerHTML = `<h2>Map</h2>`;
+  const mapControls = document.createElement("div");
+  mapControls.className = "controls";
+  mapControls.append(select("Colour by", COLOR_BY, colorBy, (v) => { colorBy = v; go(overviewHash()); }));
+  const mapNote = document.createElement("p");
+  mapNote.className = "note";
+  mapNote.textContent = colorBy === "gap"
+    ? `Seat gap: how far a party's share of ${seatWord} ran ahead of its share of the vote. Click a state for its history.`
+    : "Click a state for its history.";
+  const mapBox = document.createElement("div");
+  mapBox.className = "map-wrap";
+
+  const listHead = document.createElement("div");
+  listHead.innerHTML = `<h2>Vote share against ${office === "house" ? "seat" : "elector"} share</h2>
+    <p class="note">Sort by any column. Seat gap is half the difference between the two parties' over-
+    or under-representation, in percentage points.${office === "president"
+      ? " Electors go almost entirely to the statewide winner, so every state's gap is large." : ""}</p>`;
+  const listBox = document.createElement("div");
+
+  app.append(controls, headline, mapHead, mapControls, mapNote, mapBox, listHead, listBox);
+  drawMap(mapBox, rows, fips, colorBy, office, (po) => go(`#/state/${po}`));
+  renderList(listBox, rows, national);
+}
+
+// Sorting redraws only the list, so the map and scroll position stay put.
+function renderList(box: HTMLElement, rows: Row[], national: Row): void {
+  drawList(box, rows, national, office, sort, (s) => {
+    sort = s;
+    history.replaceState(null, "", overviewHash());
+    renderList(box, rows, national);
+  });
+}
+
+function nearest(years: number[], y: number): number {
+  return years.reduce((best, v) => (Math.abs(v - y) < Math.abs(best - y) ? v : best), years[0]);
+}
+
+async function start(): Promise<void> {
+  try {
+    const r = await fetch(dataUrl("summary.json"));
+    if (!r.ok) throw new Error(r.statusText);
+    summary = await r.json();
+  } catch {
+    app.innerHTML = `<p class="error">Could not load the election data.</p>`;
+    return;
+  }
+  window.addEventListener("hashchange", render);
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+  render();
+}
+
+start();

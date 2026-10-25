@@ -1,0 +1,413 @@
+:root {
+  --bg: #fcfcfb;
+  --panel: #ffffff;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #7d7c77;
+  --line: #e4e3df;
+  --mid: #f0efec;
+  --dem: #2a78d6;
+  --dem-strong: #184f95;
+  --rep: #e34948;
+  --rep-strong: #a32b2b;
+  --ind: #8a8984;
+  --focus: #2a78d6;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1a19;
+    --panel: #222220;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --muted: #9c9b94;
+    --line: #3a3a37;
+    --mid: #383835;
+    --dem: #3987e5;
+    --dem-strong: #86b6ef;
+    --rep: #e66767;
+    --rep-strong: #f2a3a3;
+    --ind: #9c9b94;
+    --focus: #86b6ef;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1a1a19;
+  --panel: #222220;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --muted: #9c9b94;
+  --line: #3a3a37;
+  --mid: #383835;
+  --dem: #3987e5;
+  --dem-strong: #86b6ef;
+  --rep: #e66767;
+  --rep-strong: #f2a3a3;
+  --ind: #9c9b94;
+  --focus: #86b6ef;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a {
+  color: var(--dem);
+}
+
+.top,
+main,
+.foot {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.top {
+  padding-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.tagline {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.foot {
+  margin-top: 40px;
+  padding-bottom: 32px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.loading,
+.error {
+  color: var(--text-2);
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: end;
+  margin: 20px 0 8px;
+}
+
+.controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  min-width: 120px;
+}
+
+select:focus-visible,
+button:focus-visible,
+a:focus-visible,
+th button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Headline */
+.headline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+
+.stat {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.stat .k {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.stat .v {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat .s {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+h2 {
+  font-size: 17px;
+  margin: 28px 0 4px;
+}
+
+.note {
+  color: var(--text-2);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+/* Map */
+.map-wrap {
+  position: relative;
+}
+
+.map {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.map path.state {
+  stroke: var(--bg);
+  stroke-width: 1;
+  cursor: pointer;
+}
+
+.map path.state:hover,
+.map path.state:focus {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  outline: none;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+
+.legend .ramp {
+  height: 10px;
+  width: 200px;
+  max-width: 50vw;
+  border-radius: 2px;
+}
+
+/* Table */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+
+th,
+td {
+  padding: 6px 10px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+
+thead th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+
+th button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+th[aria-sort="ascending"] button::after {
+  content: " ▲";
+}
+
+th[aria-sort="descending"] button::after {
+  content: " ▼";
+}
+
+tr.national td {
+  font-weight: 600;
+  background: var(--mid);
+}
+
+tbody tr:hover td {
+  background: var(--mid);
+}
+
+td a {
+  color: var(--text);
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+.bar {
+  display: inline-flex;
+  width: 72px;
+  height: 8px;
+  gap: 2px;
+  margin-left: 8px;
+  vertical-align: 0;
+}
+
+.bar span {
+  height: 100%;
+}
+
+.bar span:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.bar span:last-child {
+  border-radius: 0 2px 2px 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* State page */
+.back {
+  display: inline-block;
+  margin-top: 20px;
+}
+
+.state-title {
+  font-size: 26px;
+  margin: 8px 0 0;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.chart .grid line {
+  stroke: var(--line);
+}
+
+.chart .axis text {
+  fill: var(--text-2);
+  font-size: 12px;
+}
+
+.chart .axis path,
+.chart .axis line {
+  stroke: none;
+}
+
+.chart .ref {
+  stroke: var(--muted);
+  stroke-dasharray: 3 3;
+}
+
+.series-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 4px 0;
+}
+
+.series-key svg {
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+
+/* Tooltip */
+.tip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+  max-width: 260px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tip b {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.tip .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  th,
+  td {
+    padding: 6px 6px;
+  }
+  .bar {
+    display: none;
+  }
+}
