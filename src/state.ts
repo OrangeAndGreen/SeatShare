@@ -8,7 +8,7 @@ import {
 } from "./shares";
 import { cssVar, escapeHtml, hideTip, partyColor, select, showTip } from "./ui";
 
-interface YearPoint {
+export interface YearPoint {
   year: number;
   house?: Row;
   senate?: Row;
@@ -16,6 +16,29 @@ interface YearPoint {
   president?: Row;
   statehouse?: Row;
   statesenate?: Row;
+}
+
+/** The chambers the chart can draw as votes against seats. */
+export type ChartChamber = "house" | "statehouse" | "statesenate";
+
+export const CHART_CHAMBERS: { value: ChartChamber; text: string }[] = [
+  { value: "house", text: "US House" },
+  { value: "statehouse", text: "State House" },
+  { value: "statesenate", text: "State Senate" },
+];
+
+export function isChartChamber(v: string | null | undefined): v is ChartChamber {
+  return CHART_CHAMBERS.some((c) => c.value === v);
+}
+
+/** The chambers a state has results for, in menu order. */
+export function chartChambers(points: YearPoint[]): ChartChamber[] {
+  return CHART_CHAMBERS.map((c) => c.value).filter((c) => points.some((p) => p[c]));
+}
+
+/** The vote share drawn for a chamber in a year, or none when most of its seats have no votes. */
+export function chartVotes(row: Row): number | undefined {
+  return votesUnreliable(row) ? undefined : row.voteShare.D;
 }
 
 export function yearPoints(summary: Summary, po: string): YearPoint[] {
@@ -43,26 +66,38 @@ export function drawState(
   summary: Summary,
   state: StateInfo,
   districtYear: number,
+  chamber: ChartChamber,
   loadDistricts: (year: number) => Promise<Record<string, District[]>>,
   onYear: (year: number) => void,
+  onChamber: (chamber: ChartChamber) => void,
 ): void {
   const points = yearPoints(summary, state.po);
   const hasHouse = points.some((p) => p.house);
+  const chambers = chartChambers(points);
+  const shown = chambers.includes(chamber) ? chamber : chambers[0] ?? "house";
+  const name = CHART_CHAMBERS.find((c) => c.value === shown)!.text;
 
   container.innerHTML = `
     <a class="back" href="#/">← All states</a>
     <h1 class="state-title">${escapeHtml(state.name)}</h1>
     <p class="note"><a href="#/trends?area=${state.po}">See ${escapeHtml(state.name)} over time</a></p>
     <h2>Democratic share of votes and seats</h2>
-    <p class="note">Each year: the share of the House vote won by Democrats and the share of House seats they took,
-      joined by a line. Senate and presidential vote shares are shown for comparison. Republicans are roughly the rest.</p>
+    <div class="controls chart-controls"></div>
+    <p class="note">Each year: the share of the ${name} vote won by Democrats and the share of ${name} seats they took,
+      joined by a line. US Senate and presidential vote shares are shown for comparison. Republicans are roughly the rest.${
+      shown !== "house" ? " Where most seats had no votes recorded, only the seats are shown." : ""}${
+      shown === "statesenate" ? " A senate with staggered terms counts only the seats up that year." : ""}</p>
     <div class="series-key"></div>
     <div class="chart-box"></div>
     <h2>Every election</h2>
     <div class="years"></div>
     ${hasHouse ? `<h2>House districts</h2><div class="controls district-controls"></div><div class="districts"></div>` : ""}`;
 
-  drawChart(container.querySelector(".chart-box")!, container.querySelector(".series-key")!, points);
+  if (chambers.length > 1) {
+    container.querySelector(".chart-controls")!.append(
+      select("Votes and seats for", CHART_CHAMBERS.filter((c) => chambers.includes(c.value)), shown, onChamber));
+  }
+  drawChart(container.querySelector(".chart-box")!, container.querySelector(".series-key")!, points, shown, name);
   drawYears(container.querySelector(".years")!, points, summary);
 
   if (hasHouse) {
@@ -80,7 +115,7 @@ export function drawState(
   }
 }
 
-function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[]): void {
+function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[], chamber: ChartChamber, name: string): void {
   const width = 960;
   const height = 320;
   const m = { top: 12, right: 12, bottom: 28, left: 44 };
@@ -89,8 +124,8 @@ function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[]): voi
   const surface = cssVar("--bg");
 
   key.innerHTML = [
-    `<span><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="${dem}"/></svg>House votes</span>`,
-    `<span><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="${surface}" stroke="${dem}" stroke-width="2"/></svg>House seats</span>`,
+    `<span><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="${dem}"/></svg>${name} votes</span>`,
+    `<span><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="${surface}" stroke="${dem}" stroke-width="2"/></svg>${name} seats</span>`,
     `<span><svg width="12" height="12"><path d="M6 1.5L11 10.5H1Z" fill="${surface}" stroke="${ink}" stroke-width="1.5"/></svg>Senate votes</span>`,
     `<span><svg width="12" height="12"><rect x="2" y="2" width="8" height="8" fill="${ink}" transform="rotate(45 6 6)"/></svg>President votes</span>`,
   ].join("");
@@ -102,7 +137,7 @@ function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[]): voi
     .attr("class", "chart")
     .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("role", "img")
-    .attr("aria-label", "Democratic share of House votes, House seats, Senate votes and presidential votes by year");
+    .attr("aria-label", `Democratic share of ${name} votes, ${name} seats, Senate votes and presidential votes by year`);
 
   svg.append("g").attr("class", "grid")
     .selectAll("line").data([0, 0.25, 0.75, 1]).join("line")
@@ -118,18 +153,19 @@ function drawChart(box: HTMLElement, key: HTMLElement, points: YearPoint[]): voi
     .call(d3.axisBottom(x).tickValues(points.map((p) => p.year).filter((_, i) => i % every === 0))
       .tickFormat((d) => String(d)).tickSize(0));
 
-  const house = points.filter((p) => p.house);
+  const pairs = points.filter((p) => p[chamber]).map((p) => ({ year: p.year, row: p[chamber]! }));
+  const voted = pairs.filter((p) => chartVotes(p.row) !== undefined);
   const g = svg.append("g");
-  g.selectAll("line.gap").data(house).join("line")
+  g.selectAll("line.gap").data(voted).join("line")
     .attr("x1", (p) => x(p.year)!).attr("x2", (p) => x(p.year)!)
-    .attr("y1", (p) => y(p.house!.voteShare.D)).attr("y2", (p) => y(p.house!.seatShare.D))
-    .attr("stroke", (p) => partyColor(p.house!.gap >= 0 ? "D" : "R"))
+    .attr("y1", (p) => y(p.row.voteShare.D)).attr("y2", (p) => y(p.row.seatShare.D))
+    .attr("stroke", (p) => partyColor(p.row.gap >= 0 ? "D" : "R"))
     .attr("stroke-width", 2);
-  g.selectAll("circle.votes").data(house).join("circle")
-    .attr("cx", (p) => x(p.year)!).attr("cy", (p) => y(p.house!.voteShare.D))
+  g.selectAll("circle.votes").data(voted).join("circle")
+    .attr("cx", (p) => x(p.year)!).attr("cy", (p) => y(p.row.voteShare.D))
     .attr("r", 5).attr("fill", dem).attr("stroke", surface).attr("stroke-width", 2);
-  g.selectAll("circle.seats").data(house).join("circle")
-    .attr("cx", (p) => x(p.year)!).attr("cy", (p) => y(p.house!.seatShare.D))
+  g.selectAll("circle.seats").data(pairs).join("circle")
+    .attr("cx", (p) => x(p.year)!).attr("cy", (p) => y(p.row.seatShare.D))
     .attr("r", 4.5).attr("fill", surface).attr("stroke", dem).attr("stroke-width", 2);
   g.selectAll("path.senate").data(points.filter((p) => p.senate)).join("path")
     .attr("d", "M0,-5L5,4H-5Z")
@@ -165,7 +201,7 @@ function yearTip(p: YearPoint): string {
     rows.push(["President", `D ${pct(p.president.voteShare.D)} · R ${pct(p.president.voteShare.R)}`]);
   }
   for (const [label, r] of [["State House", p.statehouse], ["State Senate", p.statesenate]] as const) {
-    if (r) rows.push([label, `${formatSeats(r.seats)} · votes D ${pct(r.voteShare.D)} · R ${pct(r.voteShare.R)}`]);
+    if (r) rows.push([label, `${formatSeats(r.seats)} · votes ${legislatureVotes(r)}`]);
   }
   return `<b>${p.year}</b>` + rows.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join("");
 }

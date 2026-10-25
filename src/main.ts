@@ -4,7 +4,7 @@ import { COLOR_BY, drawMap, type ColorBy } from "./map";
 import {
   buildRows, isLegislature, isOffice, OFFICES, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
 } from "./shares";
-import { drawState } from "./state";
+import { drawState, isChartChamber, type ChartChamber } from "./state";
 import { METRICS, type Metric } from "./trend-data";
 import { drawTrends, type TrendState } from "./trends";
 import { escapeHtml, select } from "./ui";
@@ -16,12 +16,13 @@ const dataUrl = (path: string) => `${import.meta.env.BASE_URL}data/${path}`;
 let summary: Summary;
 const districtCache = new Map<number, Promise<Record<string, District[]>>>();
 
-// View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024,
+// View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024?chart=statehouse,
 // #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024
 let office: Office = "house";
 let year = 2024;
 let colorBy: ColorBy = "seatGap";
 let sort: ListState = { key: "seatGap", descending: true };
+let chartChamber: ChartChamber = "house";
 let trend: TrendState = { office: "house", area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
 
 function loadDistricts(y: number): Promise<Record<string, District[]>> {
@@ -57,6 +58,8 @@ function readHash(): Route {
     return { view: "trends" };
   }
   if (parts[0] === "state" && parts[1]) {
+    const chart = new URLSearchParams(query).get("chart");
+    chartChamber = isChartChamber(chart) ? chart : "house";
     return { view: "state", po: parts[1].toUpperCase(), year: parts[2] ? Number(parts[2]) : undefined };
   }
   if (isOffice(parts[0])) office = parts[0];
@@ -108,8 +111,11 @@ function render(): void {
     }
     document.title = `${state.name} - SeatShare`;
     const houseYears = summary.offices.house;
-    drawState(app, summary, state, route.year ?? houseYears[houseYears.length - 1], loadDistricts,
-      (y) => go(`#/state/${state.po}/${y}`));
+    const year = route.year ?? houseYears[houseYears.length - 1];
+    const stateHash = (y: number, chamber: ChartChamber) =>
+      `#/state/${state.po}/${y}${chamber === "house" ? "" : `?chart=${chamber}`}`;
+    drawState(app, summary, state, year, chartChamber, loadDistricts,
+      (y) => go(stateHash(y, chartChamber)), (chamber) => go(stateHash(year, chamber)));
     window.scrollTo(0, 0);
     return;
   }

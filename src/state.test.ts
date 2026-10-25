@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeRow } from "./shares";
-import { legislatureVotes, senateWinners } from "./state";
+import { chartChambers, chartVotes, legislatureVotes, senateWinners, type YearPoint } from "./state";
 
 describe("senateWinners", () => {
   it("lists each race with its party, marking specials", () => {
@@ -21,5 +21,23 @@ describe("legislatureVotes", () => {
     expect(legislatureVotes(row(5))).toBe("40.0% / 60.0%");
     expect(legislatureVotes(row(6))).toContain("no votes");
     expect(legislatureVotes(row(6))).toContain("6 of 10 seats");
+  });
+});
+
+describe("chart chambers", () => {
+  const row = (noVotes = 0) => makeRow("AR", "", {
+    votes: { D: 30, R: 70, O: 0 }, seats: { D: 2, R: 8, O: 0 }, noVotes,
+  });
+  it("offers only the chambers the state has, in menu order", () => {
+    const points: YearPoint[] = [
+      { year: 1968, statesenate: row() },
+      { year: 2022, house: row(), statesenate: row() },
+    ];
+    expect(chartChambers(points)).toEqual(["house", "statesenate"]);
+    expect(chartChambers([{ year: 2022, house: row() }])).toEqual(["house"]);
+  });
+  it("draws no vote share when most seats have no votes", () => {
+    expect(chartVotes(row(0))).toBe(0.3);
+    expect(chartVotes(row(6))).toBeUndefined();
   });
 });
