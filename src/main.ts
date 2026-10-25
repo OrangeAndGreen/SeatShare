@@ -2,9 +2,11 @@ import "./style.css";
 import { drawList, SORT_KEYS, type ListState } from "./list";
 import { COLOR_BY, drawMap, type ColorBy } from "./map";
 import {
-  buildRows, formatGap, formatSeatGap, formatSeats, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
+  buildRows, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
 } from "./shares";
 import { drawState } from "./state";
+import { METRICS, type Metric } from "./trend-data";
+import { drawTrends, type TrendState } from "./trends";
 import { escapeHtml, select } from "./ui";
 
 const OFFICES: { value: Office; text: string }[] = [
@@ -13,16 +15,19 @@ const OFFICES: { value: Office; text: string }[] = [
 ];
 
 const app = document.getElementById("app")!;
+const tabs = document.getElementById("tabs")!;
 const dataUrl = (path: string) => `${import.meta.env.BASE_URL}data/${path}`;
 
 let summary: Summary;
 const districtCache = new Map<number, Promise<Record<string, District[]>>>();
 
-// View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024
+// View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024,
+// #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024
 let office: Office = "house";
 let year = 2024;
 let colorBy: ColorBy = "seatGap";
 let sort: ListState = { key: "seatGap", descending: true };
+let trend: TrendState = { office: "house", area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
 
 function loadDistricts(y: number): Promise<Record<string, District[]>> {
   if (!districtCache.has(y)) {
@@ -38,14 +43,24 @@ function overviewHash(): string {
   return `#/${office}/${year}?by=${colorBy}&sort=${sort.key}-${sort.descending ? "desc" : "asc"}`;
 }
 
+function trendHash(t: TrendState): string {
+  return `#/trends?office=${t.office}&area=${t.area}&metric=${t.metric}&from=${t.from}&to=${t.to}`;
+}
+
 function go(hash: string): void {
   if (location.hash === hash) render();
   else location.hash = hash;
 }
 
-function readHash(): { view: "overview" } | { view: "state"; po: string; year?: number } {
+type Route = { view: "overview" } | { view: "trends" } | { view: "state"; po: string; year?: number };
+
+function readHash(): Route {
   const [path, query = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const parts = path.split("/").filter(Boolean);
+  if (parts[0] === "trends") {
+    readTrendParams(new URLSearchParams(query));
+    return { view: "trends" };
+  }
   if (parts[0] === "state" && parts[1]) {
     return { view: "state", po: parts[1].toUpperCase(), year: parts[2] ? Number(parts[2]) : undefined };
   }
@@ -61,8 +76,35 @@ function readHash(): { view: "overview" } | { view: "state"; po: string; year?: 
   return { view: "overview" };
 }
 
+function readTrendParams(params: URLSearchParams): void {
+  const o = params.get("office");
+  if (o === "house" || o === "president") trend.office = o;
+  const area = params.get("area")?.toUpperCase();
+  if (area && (area === NATIONAL || summary.states.some((s) => s.po === area))) trend.area = area;
+  const metric = params.get("metric");
+  if (metric && METRICS.some((m) => m.value === metric)) trend.metric = metric as Metric;
+  const years = summary.offices[trend.office];
+  const from = Number(params.get("from"));
+  const to = Number(params.get("to"));
+  trend.from = years.includes(from) ? from : years.includes(trend.from) ? trend.from : years[0];
+  trend.to = years.includes(to) ? to : years.includes(trend.to) ? trend.to : years[years.length - 1];
+}
+
+function renderTabs(route: Route): void {
+  const tab = (href: string, text: string, current: boolean) =>
+    `<a href="${href}"${current ? ` aria-current="page"` : ""}>${text}</a>`;
+  tabs.innerHTML = tab(overviewHash(), "By election", route.view === "overview")
+    + tab(trendHash(trend), "Over time", route.view === "trends");
+}
+
 function render(): void {
   const route = readHash();
+  renderTabs(route);
+  if (route.view === "trends") {
+    document.title = "Over time - SeatShare";
+    drawTrends(app, summary, trend, (t) => go(trendHash(t)));
+    return;
+  }
   if (route.view === "state") {
     const state = summary.states.find((s) => s.po === route.po);
     if (!state) {

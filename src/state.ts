@@ -40,6 +40,7 @@ export function drawState(
   container.innerHTML = `
     <a class="back" href="#/">← All states</a>
     <h1 class="state-title">${escapeHtml(state.name)}</h1>
+    <p class="note"><a href="#/trends?area=${state.po}">See ${escapeHtml(state.name)} over time</a></p>
     <h2>Democratic share of votes and seats</h2>
     <p class="note">Each year: the share of the House vote won by Democrats and the share of House seats they took,
       joined by a line. Presidential vote share is shown for comparison. Republicans are roughly the rest.</p>
