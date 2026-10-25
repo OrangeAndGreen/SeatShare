@@ -3,7 +3,7 @@
 
 import * as d3 from "d3";
 import {
-  formatGap, formatSeatGap, formatSeats, makeRow, pct, shares,
+  formatGap, formatSeatGap, formatSeats, makeRow, pct, shares, votesUnreliable,
   type District, type Row, type SenateRace, type StateInfo, type Summary,
 } from "./shares";
 import { cssVar, escapeHtml, hideTip, partyColor, select, showTip } from "./ui";
@@ -14,20 +14,26 @@ interface YearPoint {
   senate?: Row;
   senateRaces?: SenateRace[];
   president?: Row;
+  statehouse?: Row;
+  statesenate?: Row;
 }
 
 export function yearPoints(summary: Summary, po: string): YearPoint[] {
-  const years = new Set([...summary.offices.house, ...summary.offices.senate, ...summary.offices.president]);
+  const years = new Set(Object.values(summary.offices).flat());
   return [...years].sort((a, b) => a - b).map((year) => {
     const h = summary.results.house[year]?.[po];
     const s = summary.results.senate[year]?.[po];
     const p = summary.results.president[year]?.[po];
+    const sh = summary.results.statehouse[year]?.[po];
+    const ss = summary.results.statesenate[year]?.[po];
     return {
       year,
       house: h ? makeRow(po, "", h) : undefined,
       senate: s ? makeRow(po, "", s) : undefined,
       senateRaces: s?.races,
       president: p ? makeRow(po, "", p) : undefined,
+      statehouse: sh ? makeRow(po, "", sh) : undefined,
+      statesenate: ss ? makeRow(po, "", ss) : undefined,
     };
   });
 }
@@ -158,6 +164,9 @@ function yearTip(p: YearPoint): string {
   if (p.president) {
     rows.push(["President", `D ${pct(p.president.voteShare.D)} · R ${pct(p.president.voteShare.R)}`]);
   }
+  for (const [label, r] of [["State House", p.statehouse], ["State Senate", p.statesenate]] as const) {
+    if (r) rows.push([label, `${formatSeats(r.seats)} · votes D ${pct(r.voteShare.D)} · R ${pct(r.voteShare.R)}`]);
+  }
   return `<b>${p.year}</b>` + rows.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join("");
 }
 
@@ -186,14 +195,34 @@ function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): voi
       <td style="text-align:left">${cell(p.senate, () => escapeHtml(senateWinners(p.senateRaces)))}</td>
       <td>${cell(p.president, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
       <td>${cell(p.president, (r) => `${formatSeats(r.seats)} <span class="muted">${escapeHtml(presWinner)}</span>`)}</td>
+      <td>${cell(p.statehouse, legislatureVotes)}</td>
+      <td>${cell(p.statehouse, (r) => formatSeats(r.seats))}</td>
+      <td>${cell(p.statehouse, legislatureGap)}</td>
+      <td>${cell(p.statesenate, legislatureVotes)}</td>
+      <td>${cell(p.statesenate, (r) => formatSeats(r.seats))}</td>
+      <td>${cell(p.statesenate, legislatureGap)}</td>
     </tr>`;
   }).join("");
   box.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th scope="col">Year</th><th scope="col">House votes D / R</th><th scope="col">House seats</th>
       <th scope="col">Gap, points</th><th scope="col">Gap, seats</th><th scope="col">Uncontested</th>
       <th scope="col">Senate D / R</th><th scope="col" style="text-align:left">Senate winner</th>
-      <th scope="col">President D / R</th><th scope="col">Electors</th></tr></thead>
+      <th scope="col">President D / R</th><th scope="col">Electors</th>
+      <th scope="col">State House D / R</th><th scope="col">State House seats</th><th scope="col">Gap, seats</th>
+      <th scope="col">State Senate D / R</th><th scope="col">State Senate seats up</th><th scope="col">Gap, seats</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
+}
+
+/** Vote share, or a dash with the reason when most seats have no votes recorded. */
+export function legislatureVotes(r: Row): string {
+  return votesUnreliable(r)
+    ? `<span class="muted" title="${r.noVotes} of ${r.totalSeats} seats have no votes recorded">no votes</span>`
+    : `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`;
+}
+
+/** The gap in seats, greyed out when it rests on votes mostly missing. */
+export function legislatureGap(r: Row): string {
+  return votesUnreliable(r) ? `<span class="muted">${formatSeatGap(r.seatGap)}</span>` : formatSeatGap(r.seatGap);
 }
 
 function drawDistricts(box: HTMLElement, districts: District[]): void {

@@ -6,7 +6,8 @@ https://orangeandgreen.github.io/SeatShare/
 
 ## Data
 
-`scripts/build_data.py` turns the MIT Election Data and Science Lab returns into the
+`scripts/build_data.py` turns the MIT Election Data and Science Lab returns and Klarner's
+state legislative returns into the
 small JSON files in `public/data/`, which are committed so the site builds without them.
 
 | File in `data/raw/` | Source |
@@ -14,6 +15,7 @@ small JSON files in `public/data/`, which are committed so the site builds witho
 | `1976-2024-house.tab` | [US House 1976-2024](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/IG0UN2). Behind a guestbook form, so download it by hand. |
 | `1976-2024-president.csv` | [President 1976-2024](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/42MVDX). Downloaded by the script when missing. |
 | `1976-2024-senate.csv` | [US Senate 1976-2024](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/PEJ5QU). Downloaded by the script when missing. Tab-separated despite the name. |
+| `1968-2022-state-legislatures.csv` | [Carl Klarner, State Legislative Election Returns 1967-2022](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/FJOGJB), the file with one row per contest (`202slers_uoa_contest`). Downloaded by the script when missing. |
 
 ```
 python scripts/build_data.py
@@ -44,6 +46,22 @@ How the Senate file is read:
   `SENATE_FIXES` in the script.
 - Independents (Sanders, King, Lieberman in 2006, Murkowski's 2010 write-in) count
   as Other.
+
+How the state legislature file is read:
+
+- One result per state, chamber and year. Seats are the seats up that year, so a
+  senate with staggered terms counts about half its seats.
+- A contest's votes are divided by its number of seats, so a voter in a multimember
+  district counts once.
+- Odd-year elections (Virginia, New Jersey, Mississippi, Kentucky to 1983) count for
+  the next even year. Where that puts two elections of one chamber in the same year
+  (Virginia's House in 1981 and its court-ordered 1982 election, Mississippi in 1991
+  and 1992, the Rhode Island Senate in 1983 and 1984), the later one is used.
+- Arkansas, Florida, Oklahoma and Hawaii leave uncontested races off the ballot, so
+  those seats have no votes (`noVotes`). Where that is over half the seats up, the
+  map hatches the state and the list sorts it last by votes and gaps.
+- Louisiana (jungle primaries) and Nebraska (nonpartisan) are not in the file, nor is
+  Minnesota before 1974, when its legislature was nonpartisan.
 
 Electoral votes are the state's House seats plus two (DC has three), winner-take-all
 except the recorded Maine and Nebraska district splits. Faithless electors are ignored.

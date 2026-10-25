@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildRows, formatGap, formatSeatGap, formatSeats, makeRow, nationalRow, pct, seatBonus, shares, sortRows,
+  buildRows, formatGap, formatSeatGap, formatSeats, isLegislature, makeRow, nationalRow, pct, seatBonus, shares, sortRows,
+  votesUnreliable,
 } from "./shares";
 
 const nc = makeRow("NC", "North Carolina", {
@@ -80,5 +81,35 @@ describe("formatting", () => {
   });
   it("formats percentages", () => {
     expect(pct(0.5321)).toBe("53.2%");
+  });
+});
+
+describe("state legislatures", () => {
+  it("are the two state offices", () => {
+    expect(isLegislature("statehouse")).toBe(true);
+    expect(isLegislature("statesenate")).toBe(true);
+    expect(isLegislature("house")).toBe(false);
+  });
+  it("call the votes unreliable when over half the seats have none", () => {
+    const row = (noVotes: number) => makeRow("AR", "Arkansas", {
+      votes: { D: 1, R: 1, O: 0 }, seats: { D: 30, R: 70, O: 0 }, noVotes,
+    });
+    expect(votesUnreliable(row(51))).toBe(true);
+    expect(votesUnreliable(row(50))).toBe(false);
+    expect(row(0).noVotes).toBe(0);
+    expect(makeRow("MA", "Massachusetts", { votes: ma.votes, seats: ma.seats }).noVotes).toBe(0);
+  });
+});
+
+describe("sorting with missing votes", () => {
+  const ok = makeRow("WI", "Wisconsin", { votes: { D: 53, R: 47, O: 0 }, seats: { D: 36, R: 63, O: 0 } });
+  const ok2 = makeRow("MI", "Michigan", { votes: { D: 50, R: 50, O: 0 }, seats: { D: 56, R: 54, O: 0 } });
+  const ok3 = makeRow("OK", "Oklahoma", {
+    votes: { D: 30, R: 70, O: 0 }, seats: { D: 20, R: 81, O: 0 }, noVotes: 70,
+  });
+  it("puts a state with mostly no votes last when sorting by the votes or a gap", () => {
+    expect(sortRows([ok3, ok, ok2], "seatGap", true).map((r) => r.po)).toEqual(["WI", "MI", "OK"]);
+    expect(sortRows([ok3, ok, ok2], "seatGap", false).map((r) => r.po)).toEqual(["MI", "WI", "OK"]);
+    expect(sortRows([ok, ok2, ok3], "seats", true).map((r) => r.po)).toEqual(["MI", "OK", "WI"]);
   });
 });

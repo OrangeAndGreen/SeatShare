@@ -143,3 +143,39 @@ class NamesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def leg(year, state, sen, dvote, rvote, dwin, rwin, eseats=1, ovote="0", owin="0",
+        uncont="0", vmiss="0", seatsup="1"):
+    return {"year": str(year), "sab": state, "sen": str(sen), "eseats": str(eseats),
+            "dvote": dvote, "rvote": rvote, "ovote": ovote, "dwin": dwin, "rwin": rwin,
+            "owin": owin, "uncont": uncont, "vmiss": vmiss, "seatsup": seatsup}
+
+
+class LegislatureTest(unittest.TestCase):
+    def test_chambers_votes_and_seats(self):
+        rows = [leg(2022, "WI", 0, "600", "400", "1", "0", seatsup="2"),
+                leg(2022, "WI", 0, "", "", "0", "1", uncont="1", vmiss="1", seatsup="2"),
+                leg(2022, "WI", 1, "100", "300", "0", "1")]
+        out = b.legislature_results(rows)
+        house = out["statehouse"]["2022"]["WI"]
+        self.assertEqual(house["votes"], {"D": 600, "R": 400, "O": 0})
+        self.assertEqual(house["seats"], {"D": 1, "R": 1, "O": 0})
+        self.assertEqual((house["uncontested"], house["noVotes"]), (1, 1))
+        self.assertEqual(out["statesenate"]["2022"]["WI"]["seats"], {"D": 0, "R": 1, "O": 0})
+
+    def test_multimember_votes_count_once_per_voter(self):
+        # Two seats, each voter casts two votes; one D and one R win.
+        rows = [leg(2022, "NH", 0, "2000", "1800", ".5", ".5", eseats=2, seatsup="2")]
+        r = b.legislature_results(rows)["statehouse"]["2022"]["NH"]
+        self.assertEqual(r["votes"], {"D": 1000, "R": 900, "O": 0})
+        self.assertEqual(r["seats"], {"D": 1, "R": 1, "O": 0})
+
+    def test_odd_years_count_for_next_even_year_later_one_wins(self):
+        rows = [leg(2021, "VA", 0, "10", "20", "0", "1"),
+                leg(1981, "VA", 0, "30", "10", "1", "0"),
+                leg(1982, "VA", 0, "10", "30", "0", "1")]
+        out = b.legislature_results(rows)["statehouse"]
+        self.assertEqual(sorted(out), ["1982", "2022"])
+        self.assertEqual(out["2022"]["VA"]["seats"]["R"], 1)
+        self.assertEqual(out["1982"]["VA"]["seats"], {"D": 0, "R": 1, "O": 0})

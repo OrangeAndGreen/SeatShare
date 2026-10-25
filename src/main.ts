@@ -2,7 +2,7 @@ import "./style.css";
 import { drawList, SORT_KEYS, type ListState } from "./list";
 import { COLOR_BY, drawMap, type ColorBy } from "./map";
 import {
-  buildRows, isOffice, OFFICES, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
+  buildRows, isLegislature, isOffice, OFFICES, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
 } from "./shares";
 import { drawState } from "./state";
 import { METRICS, type Metric } from "./trend-data";
@@ -164,6 +164,10 @@ function renderOverview(): void {
     : colorBy === "gap"
       ? `Seat gap in points: how far a party's share of ${seatWord} ran ahead of its share of the vote. `
       : "") + (office === "senate" ? "Hatched states had no Senate race that year. " : "")
+    + (isLegislature(office)
+      ? "Hatched: no partisan election (Nebraska's legislature is nonpartisan; Louisiana isn't in yet), or, "
+        + "except when colouring by seats, more than half the seats up had no votes recorded. "
+      : "")
     + "Click a state for its history.";
   const mapBox = document.createElement("div");
   mapBox.className = "map-wrap";
@@ -176,7 +180,7 @@ function renderOverview(): void {
       ? " Electors go almost entirely to the statewide winner, so every state's gap is large."
       : office === "senate"
         ? " Only states with a race that year are listed. With one seat up, the winner takes it all, so a state's gap is large; the national row is where Senate gaps mean most."
-        : ""}</p>`;
+        : isLegislature(office) ? LEGISLATURE_NOTE : ""}</p>`;
   const listBox = document.createElement("div");
 
   app.append(controls, headline, mapHead, mapControls, mapNote, mapBox, listHead, listBox);
@@ -192,6 +196,12 @@ function renderList(box: HTMLElement, rows: Row[], national: Row): void {
     renderList(box, rows, national);
   });
 }
+
+const LEGISLATURE_NOTE = ` Seats are the seats up that year, so a senate with staggered terms counts about
+  half its seats. A third of state legislative seats are uncontested, and Arkansas, Florida, Oklahoma and Hawaii
+  leave uncontested races off the ballot, so those seats add no votes and pull the winners' vote share down.
+  In a district electing several members each voter's votes count once. Virginia, New Jersey and Mississippi vote in
+  odd years, which count for the next even year. Data: Carl Klarner's State Legislative Election Returns, 1968-2022.`;
 
 function nearest(years: number[], y: number): number {
   return years.reduce((best, v) => (Math.abs(v - y) < Math.abs(best - y) ? v : best), years[0]);

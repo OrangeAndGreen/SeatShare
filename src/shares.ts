@@ -2,13 +2,25 @@
 
 export type Party = "D" | "R" | "O";
 export type Counts = Record<Party, number>;
-export type Office = "house" | "senate" | "president";
+export type Office = "house" | "senate" | "president" | "statehouse" | "statesenate";
 
 export const OFFICES: { value: Office; text: string }[] = [
   { value: "house", text: "US House" },
   { value: "senate", text: "US Senate" },
   { value: "president", text: "President" },
+  { value: "statehouse", text: "State House" },
+  { value: "statesenate", text: "State Senate" },
 ];
+
+/** State legislative chambers, from Klarner's returns. */
+export function isLegislature(office: Office): boolean {
+  return office === "statehouse" || office === "statesenate";
+}
+
+/** Over half the seats up have no votes recorded: the vote share means little. */
+export function votesUnreliable(row: Row): boolean {
+  return row.noVotes * 2 > row.totalSeats;
+}
 
 export function isOffice(v: string | undefined): v is Office {
   return OFFICES.some((o) => o.value === v);
@@ -34,6 +46,8 @@ export interface StateResult {
   votes: Counts;
   seats: Counts;
   uncontested?: number;
+  /** State legislatures: seats with no votes recorded, mostly uncontested seats left off the ballot. */
+  noVotes?: number;
   /** Senate only: the races that year, two when there was a special. */
   races?: SenateRace[];
 }
@@ -68,6 +82,7 @@ export interface Row {
   totalVotes: number;
   totalSeats: number;
   uncontested: number;
+  noVotes: number;
 }
 
 export const PARTIES: Party[] = ["D", "R", "O"];
@@ -104,6 +119,7 @@ export function makeRow(po: string, name: string, r: StateResult): Row {
     totalVotes: total(r.votes),
     totalSeats: total(r.seats),
     uncontested: r.uncontested ?? 0,
+    noVotes: r.noVotes ?? 0,
   };
 }
 
@@ -120,10 +136,12 @@ export function nationalRow(rows: Row[]): Row {
     return c;
   };
   const uncontested = rows.reduce((n, r) => n + r.uncontested, 0);
+  const noVotes = rows.reduce((n, r) => n + r.noVotes, 0);
   return makeRow(NATIONAL, "United States", {
     votes: add((r) => r.votes),
     seats: add((r) => r.seats),
     uncontested,
+    noVotes,
   });
 }
 
@@ -142,9 +160,14 @@ const sortValue: Record<SortKey, (r: Row) => number | string> = {
   seatGap: (r) => Math.abs(r.seatGap),
 };
 
+// Keys that rest on the vote. A state whose votes are mostly missing sorts last by them.
+const BY_VOTES: SortKey[] = ["demVotes", "repVotes", "gap", "seatGap"];
+
 export function sortRows(rows: Row[], key: SortKey, descending: boolean): Row[] {
   const get = sortValue[key];
+  const byVotes = BY_VOTES.includes(key);
   return [...rows].sort((a, b) => {
+    if (byVotes && votesUnreliable(a) !== votesUnreliable(b)) return votesUnreliable(a) ? 1 : -1;
     const x = get(a);
     const y = get(b);
     const c = typeof x === "string" ? x.localeCompare(y as string) : (x as number) - (y as number);

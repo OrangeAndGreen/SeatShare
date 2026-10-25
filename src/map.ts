@@ -4,7 +4,7 @@ import * as d3 from "d3";
 import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import us from "us-atlas/states-albers-10m.json";
-import { formatGap, formatSeatGap, formatSeats, margin, pct, type Office, type Row } from "./shares";
+import { formatGap, formatSeatGap, formatSeats, margin, pct, votesUnreliable, type Office, type Row } from "./shares";
 import { divergingScale, escapeHtml, hideTip, showTip } from "./ui";
 
 export type ColorBy = "votes" | "seats" | "gap" | "seatGap";
@@ -18,10 +18,18 @@ export const COLOR_BY: { value: ColorBy; text: string }[] = [
 
 const EXTENT: Record<ColorBy, number> = { votes: 0.5, seats: 1, gap: 0.3, seatGap: 4 };
 
-/** Where the colour scale tops out. A Senate state has one or two seats up, so its gap
- * in seats is under one. */
+// The gap in seats tops out where about one state in ten does. A Senate state has one or
+// two seats up, so its gap is under one; a state house can have 100 or more.
+const SEAT_GAP_EXTENT: Record<Office, number> = { house: 4, president: 4, senate: 1, statehouse: 15, statesenate: 5 };
+
+/** Where the colour scale tops out. */
 export function extent(by: ColorBy, office: Office): number {
-  return by === "seatGap" && office === "senate" ? 1 : EXTENT[by];
+  return by === "seatGap" ? SEAT_GAP_EXTENT[office] : EXTENT[by];
+}
+
+/** A state is hatched with no result, or when the colour rests on votes it mostly lacks. */
+export function hatched(row: Row | undefined, by: ColorBy): boolean {
+  return !row || (by !== "seats" && votesUnreliable(row));
 }
 
 const topo = us as unknown as Topology<{ states: GeometryCollection<{ name: string }> }>;
@@ -62,6 +70,7 @@ export function tipHtml(row: Row, office: Office): string {
     ["Seat gap", `${formatSeatGap(row.seatGap)} ${seatWord.toLowerCase()}`],
   ];
   if (row.uncontested) lines.push(["Uncontested", String(row.uncontested)]);
+  if (row.noVotes) lines.push(["No votes recorded", `${row.noVotes} seats`]);
   return `<b>${escapeHtml(row.name)}</b>`
     + lines.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join("");
 }
@@ -88,8 +97,8 @@ export function drawMap(
     .attr("role", "img")
     .attr("aria-label", `Map of states coloured by ${COLOR_BY.find((c) => c.value === by)!.text.toLowerCase()}`);
 
-  // States with no result that year (most Senate years) are hatched, so they can't be
-  // mistaken for an even result.
+  // States with no result that year (most Senate years, Nebraska's legislature) are
+  // hatched, so they can't be mistaken for an even result.
   svg.append("defs").append("pattern")
     .attr("id", "no-race").attr("patternUnits", "userSpaceOnUse")
     .attr("width", 6).attr("height", 6).attr("patternTransform", "rotate(45)")
@@ -106,7 +115,7 @@ export function drawMap(
     .attr("d", path)
     .attr("fill", (f) => {
       const r = byFips.get(String(f.id));
-      return r ? color(value(r, by)) : "url(#no-race)";
+      return hatched(r, by) ? "url(#no-race)" : color(value(r!, by));
     })
     .attr("tabindex", (f) => (byFips.has(String(f.id)) ? 0 : null))
     .attr("aria-label", (f) => {

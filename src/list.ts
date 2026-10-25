@@ -1,6 +1,6 @@
 // The sortable list: one row per state, vote share against seat share.
 
-import { formatGap, formatSeatGap, formatSeats, pct, sortRows, type Office, type Row, type SortKey } from "./shares";
+import { formatGap, formatSeatGap, formatSeats, pct, sortRows, votesUnreliable, type Office, type Row, type SortKey } from "./shares";
 import { escapeHtml, shareBar } from "./ui";
 
 interface Column {
@@ -8,6 +8,8 @@ interface Column {
   label: string;
   cell: (r: Row, office: Office) => string;
   firstDescending: boolean;
+  /** Greyed out when most of the state's seats have no votes recorded. */
+  fromVotes?: boolean;
 }
 
 const COLUMNS: Column[] = [
@@ -20,7 +22,7 @@ const COLUMNS: Column[] = [
     cell: (r) => String(r.totalSeats),
   },
   {
-    key: "demVotes", label: "D votes", firstDescending: true,
+    key: "demVotes", fromVotes: true, label: "D votes", firstDescending: true,
     cell: (r) => pct(r.voteShare.D),
   },
   {
@@ -28,7 +30,7 @@ const COLUMNS: Column[] = [
     cell: (r) => pct(r.seatShare.D, 0),
   },
   {
-    key: "repVotes", label: "R votes", firstDescending: true,
+    key: "repVotes", fromVotes: true, label: "R votes", firstDescending: true,
     cell: (r) => pct(r.voteShare.R),
   },
   {
@@ -36,14 +38,20 @@ const COLUMNS: Column[] = [
     cell: (r) => pct(r.seatShare.R, 0),
   },
   {
-    key: "gap", label: "Gap, points", firstDescending: true,
+    key: "gap", fromVotes: true, label: "Gap, points", firstDescending: true,
     cell: (r) => formatGap(r.gap),
   },
   {
-    key: "seatGap", label: "Gap, seats", firstDescending: true,
+    key: "seatGap", fromVotes: true, label: "Gap, seats", firstDescending: true,
     cell: (r) => formatSeatGap(r.seatGap),
   },
 ];
+
+function cell(c: Column, r: Row, office: Office): string {
+  return c.fromVotes && votesUnreliable(r)
+    ? `<span class="muted" title="${r.noVotes} of ${r.totalSeats} seats have no votes recorded">${c.cell(r, office)}</span>`
+    : c.cell(r, office);
+}
 
 export const SORT_KEYS: SortKey[] = COLUMNS.map((c) => c.key);
 
@@ -69,9 +77,10 @@ export function drawList(
   }).join("") + `<th scope="col">Split</th>`;
 
   const line = (r: Row, cls = "") =>
-    `<tr class="${cls}">${COLUMNS.map((c) => `<td>${c.cell(r, office)}</td>`).join("")}`
+    `<tr class="${cls}">${COLUMNS.map((c) => `<td>${cell(c, r, office)}</td>`).join("")}`
     + `<td><span class="muted">${formatSeats(r.seats)}</span>${shareBar(r.seatShare.D, r.seatShare.R)}`
-    + `${r.uncontested ? ` <span class="muted" title="Uncontested seats">· ${r.uncontested} unc.</span>` : ""}</td></tr>`;
+    + `${r.uncontested ? ` <span class="muted" title="Uncontested seats">· ${r.uncontested} unc.</span>` : ""}`
+    + `${r.noVotes ? ` <span class="muted" title="Seats with no votes recorded">· ${r.noVotes} no votes</span>` : ""}</td></tr>`;
 
   container.innerHTML = `<div class="table-wrap"><table>
     <thead><tr>${head}</tr></thead>

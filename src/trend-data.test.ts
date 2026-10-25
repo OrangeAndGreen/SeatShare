@@ -7,7 +7,9 @@ const summary: Summary = {
     { po: "VT", name: "Vermont", fips: "50" },
     { po: "NC", name: "North Carolina", fips: "37" },
   ],
-  offices: { house: [2000, 2002, 2004], senate: [2000, 2002], president: [2000, 2004] },
+  offices: {
+    house: [2000, 2002, 2004], senate: [2000, 2002], president: [2000, 2004], statehouse: [2002], statesenate: [],
+  },
   nominees: {},
   source: "",
   results: {
@@ -40,6 +42,13 @@ const summary: Summary = {
       },
     },
     president: { 2000: {}, 2004: {} },
+    statehouse: {
+      2002: {
+        VT: { votes: { D: 60, R: 40, O: 0 }, seats: { D: 90, R: 60, O: 0 }, uncontested: 30, noVotes: 10 },
+        NC: { votes: { D: 40, R: 60, O: 0 }, seats: { D: 50, R: 70, O: 0 }, uncontested: 70, noVotes: 65 },
+      },
+    },
+    statesenate: {},
   },
 };
 
@@ -67,6 +76,15 @@ describe("senate", () => {
   it("adds up only the states with a race", () => {
     const points = trendPoints(summary, "senate", "US", 2000, 2002);
     expect(points.map((p) => p.row.totalSeats)).toEqual([2, 1]);
+  });
+});
+
+describe("state legislatures", () => {
+  it("adds up the seats with no votes for the nation", () => {
+    const [us] = trendPoints(summary, "statehouse", "US", 2002, 2002);
+    expect(us.row.noVotes).toBe(75);
+    expect(us.row.uncontested).toBe(100);
+    expect(us.row.totalSeats).toBe(270);
   });
 });
 

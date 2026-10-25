@@ -5,7 +5,10 @@ Raw files go in data/raw/ (not committed):
                            (behind a guestbook form, so download it by hand)
   1976-2024-president.csv  President 1976-2024, doi:10.7910/DVN/42MVDX
   1976-2024-senate.csv     US Senate 1976-2024, doi:10.7910/DVN/PEJ5QU
-                           (these two are downloaded automatically when missing)
+  1968-2022-state-legislatures.csv
+                           Klarner's state legislative returns, one row per contest,
+                           doi:10.7910/DVN/FJOGJB
+                           (these three are downloaded automatically when missing)
 
 Writes public/data/summary.json (every state, office and year at state level)
 and public/data/house/<year>.json (district results).
@@ -30,6 +33,8 @@ PRESIDENT_FILE = RAW / "1976-2024-president.csv"
 PRESIDENT_URL = "https://dataverse.harvard.edu/api/access/datafile/13887042"
 SENATE_FILE = RAW / "1976-2024-senate.csv"
 SENATE_URL = "https://dataverse.harvard.edu/api/access/datafile/13887039"
+LEGISLATURE_FILE = RAW / "1968-2022-state-legislatures.csv"
+LEGISLATURE_URL = "https://dataverse.harvard.edu/api/access/datafile/10273086?format=original"
 HOUSE_PAGE = "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/IG0UN2"
 
 D, R, O = "D", "R", "O"
@@ -235,6 +240,61 @@ def senate_contests(rows):
     return contests
 
 
+LEGISLATURE_OFFICES = {"0": "statehouse", "1": "statesenate"}
+
+
+def to_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def legislature_results(rows):
+    """{office: {year: {state: result}}} from Klarner's contest file.
+
+    A contest's votes are divided by its seats, so a voter in a multimember district
+    counts once. Odd-year elections count for the next even year; when that puts two
+    elections of one chamber in the same year (Virginia's 1981 and court-ordered 1982
+    House elections), the later one decides. "noVotes" counts seats with no votes
+    recorded, mostly uncontested seats in states that leave them off the ballot.
+    """
+    by_election = defaultdict(list)
+    for row in rows:
+        by_election[(LEGISLATURE_OFFICES[row["sen"]], int(row["year"]), row["sab"])].append(row)
+
+    chosen = {}
+    for (office, year, state) in sorted(by_election):
+        slot = (office, year + year % 2, state)
+        if slot in chosen:
+            print(f"note: {office} {state} {year} replaces {chosen[slot][1]} as {slot[1]}")
+        chosen[slot] = (office, year, state)  # sorted by year, so the later one stays
+
+    results = defaultdict(dict)
+    for (office, slot_year, state), key in sorted(chosen.items()):
+        votes = {D: 0.0, R: 0.0, O: 0.0}
+        seats = empty_counts()
+        uncontested = no_votes = 0
+        for row in by_election[key]:
+            n = int(row["eseats"])
+            for p, field in ((D, "d"), (R, "r"), (O, "o")):
+                votes[p] += to_float(row[field + "vote"]) / n
+                seats[p] += round(to_float(row[field + "win"]) * n)
+            uncontested += n * (row["uncont"] == "1")
+            no_votes += n * (row["vmiss"] == "1")
+        seats_up = int(by_election[key][0]["seatsup"])
+        if sum(seats.values()) != seats_up:
+            print(f"warning: {office} {key[1]} {state} has {sum(seats.values())} winners "
+                  f"for {seats_up} seats")
+        results[office].setdefault(str(slot_year), {})[state] = {
+            "votes": {p: round(v) for p, v in votes.items()},
+            "seats": seats,
+            "uncontested": uncontested,
+            "noVotes": no_votes,
+        }
+    return results
+
+
 def president_results(rows):
     """{(year, state): {votes, candidates}} with each party's top candidate."""
     by_state = defaultdict(list)
@@ -294,7 +354,8 @@ def read_csv(path, dialect="excel"):
 
 def ensure_raw():
     RAW.mkdir(parents=True, exist_ok=True)
-    for path, url in ((PRESIDENT_FILE, PRESIDENT_URL), (SENATE_FILE, SENATE_URL)):
+    for path, url in ((PRESIDENT_FILE, PRESIDENT_URL), (SENATE_FILE, SENATE_URL),
+                      (LEGISLATURE_FILE, LEGISLATURE_URL)):
         if not path.exists():
             print(f"Downloading {path.name}")
             urllib.request.urlretrieve(url, path)
@@ -308,6 +369,7 @@ def build():
     house_rows = read_csv(HOUSE_FILE)
     pres_rows = read_csv(PRESIDENT_FILE)
     senate_rows = read_csv(SENATE_FILE, dialect="excel-tab")  # tab-separated despite the name
+    legislature_rows = read_csv(LEGISLATURE_FILE)
 
     states = {}
     for row in house_rows + pres_rows:
@@ -345,6 +407,7 @@ def build():
         s["uncontested"] += c["uncontested"]
         s["races"].append({"winner": display_name(c["winner"]), "party": c["party"],
                            "special": c["special"]})
+    summary.update(legislature_results(legislature_rows))
     candidates = {}
     for (year, state), p in sorted(pres.items()):
         win = winner_of(p["votes"])
@@ -366,9 +429,11 @@ def build():
             "house": sorted(int(y) for y in summary["house"]),
             "senate": sorted(int(y) for y in summary["senate"]),
             "president": sorted(int(y) for y in summary["president"]),
+            "statehouse": sorted(int(y) for y in summary["statehouse"]),
+            "statesenate": sorted(int(y) for y in summary["statesenate"]),
         },
         "nominees": nominees,
-        "source": "MIT Election Data and Science Lab, Harvard Dataverse",
+        "source": "MIT Election Data and Science Lab; Carl Klarner, State Legislative Election Returns; Harvard Dataverse",
     }
     write_json(OUT / "summary.json", dict(meta, results=summary))
     for year in meta["offices"]["house"]:
