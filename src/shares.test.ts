@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildRows, formatGap, formatSeats, makeRow, nationalRow, pct, seatBonus, shares, sortRows,
+  buildRows, formatGap, formatSeatGap, formatSeats, makeRow, nationalRow, pct, seatBonus, shares, sortRows,
 } from "./shares";
 
 const nc = makeRow("NC", "North Carolina", {
@@ -47,10 +47,22 @@ describe("rows", () => {
     expect(us.totalSeats).toBe(23);
     expect(us.uncontested).toBe(2);
   });
-  it("sorts by gap size either way", () => {
-    expect(sortRows([nc, ma], "absGap", true).map((r) => r.po)).toEqual(["MA", "NC"]);
-    expect(sortRows([ma, nc], "name", false).map((r) => r.po)).toEqual(["MA", "NC"]);
-    expect(sortRows([ma, nc], "gap", false)[0].po).toBe("NC");
+  it("sorts the gaps by size, whichever party they favour", () => {
+    // MA: D +2.97 seats, NC: R +2.58, TX: R +10
+    const tx = makeRow("TX", "Texas", { votes: { D: 50, R: 50, O: 0 }, seats: { D: 10, R: 30, O: 0 } });
+    expect(sortRows([ma, nc, tx], "seatGap", true).map((r) => r.po)).toEqual(["TX", "MA", "NC"]);
+    expect(sortRows([ma, nc, tx], "seatGap", false).map((r) => r.po)).toEqual(["NC", "MA", "TX"]);
+    expect(sortRows([nc, ma], "gap", true).map((r) => r.po)).toEqual(["MA", "NC"]);
+    expect(sortRows([nc, ma], "name", false).map((r) => r.po)).toEqual(["MA", "NC"]);
+  });
+  it("turns the gap into seats", () => {
+    // Proportional: D 47% of 14 = 6.58 seats, won 4
+    expect(nc.seatGap).toBeCloseTo(nc.gap * 14);
+    expect(nc.seatGap).toBeCloseTo(-2.58);
+    const big = makeRow("CA", "California", { votes: { D: 60, R: 40, O: 0 }, seats: { D: 43, R: 9, O: 0 } });
+    const small = makeRow("NH", "New Hampshire", { votes: { D: 52, R: 48, O: 0 }, seats: { D: 2, R: 0, O: 0 } });
+    expect(Math.abs(small.gap)).toBeGreaterThan(Math.abs(big.gap));
+    expect(Math.abs(big.seatGap)).toBeGreaterThan(Math.abs(small.seatGap));
   });
 });
 
@@ -59,6 +71,8 @@ describe("formatting", () => {
     expect(formatGap(0.123)).toBe("D +12.3");
     expect(formatGap(-0.04)).toBe("R +4.0");
     expect(formatGap(0.0001)).toBe("Even");
+    expect(formatSeatGap(-2.58)).toBe("R +2.6");
+    expect(formatSeatGap(0.01)).toBe("Even");
   });
   it("lists seats largest first and leaves out empty parties", () => {
     expect(formatSeats({ D: 4, R: 10, O: 0 })).toBe("10 R, 4 D");

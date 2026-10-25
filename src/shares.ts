@@ -41,6 +41,8 @@ export interface Row {
   seatShare: Counts;
   /** Seat share minus vote share, Democrats less Republicans, halved: + favours D. */
   gap: number;
+  /** The gap in seats: how many seats beyond a proportional split. + favours D. */
+  seatGap: number;
   totalVotes: number;
   totalSeats: number;
   uncontested: number;
@@ -67,6 +69,7 @@ export function seatBonus(voteShare: Counts, seatShare: Counts): number {
 export function makeRow(po: string, name: string, r: StateResult): Row {
   const voteShare = shares(r.votes);
   const seatShare = shares(r.seats);
+  const gap = seatBonus(voteShare, seatShare);
   return {
     po,
     name,
@@ -74,7 +77,8 @@ export function makeRow(po: string, name: string, r: StateResult): Row {
     seats: r.seats,
     voteShare,
     seatShare,
-    gap: seatBonus(voteShare, seatShare),
+    gap,
+    seatGap: gap * total(r.seats),
     totalVotes: total(r.votes),
     totalSeats: total(r.seats),
     uncontested: r.uncontested ?? 0,
@@ -102,8 +106,9 @@ export function nationalRow(rows: Row[]): Row {
 }
 
 export type SortKey =
-  | "name" | "seats" | "demVotes" | "demSeats" | "repVotes" | "repSeats" | "gap" | "absGap";
+  | "name" | "seats" | "demVotes" | "demSeats" | "repVotes" | "repSeats" | "gap" | "seatGap";
 
+// The gaps sort by size, whichever party they favour.
 const sortValue: Record<SortKey, (r: Row) => number | string> = {
   name: (r) => r.name,
   seats: (r) => r.totalSeats,
@@ -111,8 +116,8 @@ const sortValue: Record<SortKey, (r: Row) => number | string> = {
   demSeats: (r) => r.seatShare.D,
   repVotes: (r) => r.voteShare.R,
   repSeats: (r) => r.seatShare.R,
-  gap: (r) => r.gap,
-  absGap: (r) => Math.abs(r.gap),
+  gap: (r) => Math.abs(r.gap),
+  seatGap: (r) => Math.abs(r.seatGap),
 };
 
 export function sortRows(rows: Row[], key: SortKey, descending: boolean): Row[] {
@@ -134,6 +139,12 @@ export function formatGap(gap: number): string {
   const points = Math.abs(gap) * 100;
   if (points < 0.05) return "Even";
   return `${gap > 0 ? "D" : "R"} +${points.toFixed(1)}`;
+}
+
+/** "R +3.1" / "D +0.4" / "Even", in seats. */
+export function formatSeatGap(seats: number): string {
+  if (Math.abs(seats) < 0.05) return "Even";
+  return `${seats > 0 ? "D" : "R"} +${Math.abs(seats).toFixed(1)}`;
 }
 
 /** "5 R, 1 D": the larger side first, parties with no seats left out. */

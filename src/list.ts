@@ -1,6 +1,6 @@
 // The sortable list: one row per state, vote share against seat share.
 
-import { formatGap, formatSeats, pct, sortRows, type Office, type Row, type SortKey } from "./shares";
+import { formatGap, formatSeatGap, formatSeats, pct, sortRows, type Office, type Row, type SortKey } from "./shares";
 import { escapeHtml, shareBar } from "./ui";
 
 interface Column {
@@ -36,10 +36,16 @@ const COLUMNS: Column[] = [
     cell: (r) => pct(r.seatShare.R, 0),
   },
   {
-    key: "gap", label: "Seat gap", firstDescending: true,
+    key: "gap", label: "Gap, points", firstDescending: true,
     cell: (r) => formatGap(r.gap),
   },
+  {
+    key: "seatGap", label: "Gap, seats", firstDescending: true,
+    cell: (r) => formatSeatGap(r.seatGap),
+  },
 ];
+
+export const SORT_KEYS: SortKey[] = COLUMNS.map((c) => c.key);
 
 export interface ListState {
   key: SortKey;
@@ -57,7 +63,7 @@ export function drawList(
   const seatsLabel = office === "house" ? "Seats" : "Electors";
   const sorted = sortRows(rows, sort.key, sort.descending);
   const head = COLUMNS.map((c) => {
-    const label = c.key === "seats" ? seatsLabel : c.label.replace("seats", office === "house" ? "seats" : "electors");
+    const label = c.key === "seats" ? seatsLabel : c.label.replace(/seats$/, office === "house" ? "seats" : "electors");
     const aria = c.key === sort.key ? (sort.descending ? "descending" : "ascending") : "none";
     return `<th scope="col" aria-sort="${aria}"><button data-key="${c.key}">${label}</button></th>`;
   }).join("") + `<th scope="col">Split</th>`;

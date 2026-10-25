@@ -4,18 +4,19 @@ import * as d3 from "d3";
 import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import us from "us-atlas/states-albers-10m.json";
-import { formatGap, formatSeats, margin, pct, type Office, type Row } from "./shares";
+import { formatGap, formatSeatGap, formatSeats, margin, pct, type Office, type Row } from "./shares";
 import { divergingScale, escapeHtml, hideTip, showTip } from "./ui";
 
-export type ColorBy = "votes" | "seats" | "gap";
+export type ColorBy = "votes" | "seats" | "gap" | "seatGap";
 
 export const COLOR_BY: { value: ColorBy; text: string }[] = [
-  { value: "gap", text: "Seat gap" },
+  { value: "seatGap", text: "Seat gap, in seats" },
+  { value: "gap", text: "Seat gap, in points" },
   { value: "votes", text: "Vote margin" },
   { value: "seats", text: "Seat margin" },
 ];
 
-const EXTENT: Record<ColorBy, number> = { votes: 0.5, seats: 1, gap: 0.3 };
+const EXTENT: Record<ColorBy, number> = { votes: 0.5, seats: 1, gap: 0.3, seatGap: 4 };
 
 const topo = us as unknown as Topology<{ states: GeometryCollection<{ name: string }> }>;
 const states = feature(topo, topo.objects.states).features;
@@ -23,18 +24,25 @@ const states = feature(topo, topo.objects.states).features;
 export function value(row: Row, by: ColorBy): number {
   if (by === "votes") return margin(row.voteShare);
   if (by === "seats") return margin(row.seatShare);
+  if (by === "seatGap") return row.seatGap;
   return row.gap;
 }
 
-function marginText(m: number): string {
+function valueText(row: Row, by: ColorBy): string {
+  if (by === "seatGap") return `${formatSeatGap(row.seatGap)} seats`;
+  const m = value(row, by);
   if (Math.abs(m) < 0.0005) return "Even";
   return `${m > 0 ? "D" : "R"} +${(Math.abs(m) * 100).toFixed(1)}`;
 }
 
-export function legendText(by: ColorBy): [string, string] {
+export function legendText(by: ColorBy, office: Office): [string, string] {
+  if (by === "seatGap") {
+    const unit = office === "house" ? "seats" : "electors";
+    return [`R +${EXTENT[by]} ${unit} or more`, `D +${EXTENT[by]}`];
+  }
   const e = EXTENT[by] * 100;
   return by === "gap"
-    ? [`R seats ahead of votes by ${e}+`, `D by ${e}+`]
+    ? [`R seats ahead of votes by ${e}+ pts`, `D by ${e}+`]
     : [`R +${e}`, `D +${e}`];
 }
 
@@ -43,7 +51,8 @@ export function tipHtml(row: Row, office: Office): string {
   const lines = [
     ["Votes", `D ${pct(row.voteShare.D)} · R ${pct(row.voteShare.R)}`],
     [seatWord, formatSeats(row.seats) || "-"],
-    ["Seat gap", formatGap(row.gap)],
+    ["Seat gap", `${formatGap(row.gap)} pts`],
+    ["Seat gap", `${formatSeatGap(row.seatGap)} ${seatWord.toLowerCase()}`],
   ];
   if (row.uncontested) lines.push(["Uncontested", String(row.uncontested)]);
   return `<b>${escapeHtml(row.name)}</b>`
@@ -83,7 +92,7 @@ export function drawMap(
     .attr("tabindex", (f) => (byFips.has(String(f.id)) ? 0 : null))
     .attr("aria-label", (f) => {
       const r = byFips.get(String(f.id));
-      return r ? `${r.name}: ${marginText(value(r, by))}` : f.properties.name;
+      return r ? `${r.name}: ${valueText(r, by)}` : f.properties.name;
     })
     .on("mousemove", (event: MouseEvent, f) => {
       const r = byFips.get(String(f.id));
@@ -105,7 +114,7 @@ export function drawMap(
       }
     });
 
-  const [lo, hi] = legendText(by);
+  const [lo, hi] = legendText(by, office);
   const ramp = d3.range(0, 1.0001, 0.1).map((t) => color(-EXTENT[by] + t * 2 * EXTENT[by]));
   const legend = document.createElement("div");
   legend.className = "legend";

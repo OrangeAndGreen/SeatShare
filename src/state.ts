@@ -3,7 +3,7 @@
 
 import * as d3 from "d3";
 import {
-  formatGap, formatSeats, makeRow, pct, shares, type District, type Row, type StateInfo, type Summary,
+  formatGap, formatSeatGap, formatSeats, makeRow, pct, shares, type District, type Row, type StateInfo, type Summary,
 } from "./shares";
 import { cssVar, escapeHtml, hideTip, partyColor, select, showTip } from "./ui";
 
@@ -137,7 +137,7 @@ function yearTip(p: YearPoint): string {
   if (p.house) {
     rows.push(["House votes", `D ${pct(p.house.voteShare.D)} · R ${pct(p.house.voteShare.R)}`]);
     rows.push(["House seats", formatSeats(p.house.seats)]);
-    rows.push(["Seat gap", formatGap(p.house.gap)]);
+    rows.push(["Seat gap", `${formatGap(p.house.gap)} pts · ${formatSeatGap(p.house.seatGap)} seats`]);
   }
   if (p.president) {
     rows.push(["President", `D ${pct(p.president.voteShare.D)} · R ${pct(p.president.voteShare.R)}`]);
@@ -157,6 +157,7 @@ function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): voi
       <td>${cell(p.house, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
       <td>${cell(p.house, (r) => formatSeats(r.seats))}</td>
       <td>${cell(p.house, (r) => formatGap(r.gap))}</td>
+      <td>${cell(p.house, (r) => formatSeatGap(r.seatGap))}</td>
       <td>${cell(p.house, (r) => (r.uncontested ? String(r.uncontested) : ""))}</td>
       <td>${cell(p.president, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
       <td>${cell(p.president, (r) => `${formatSeats(r.seats)} <span class="muted">${escapeHtml(presWinner)}</span>`)}</td>
@@ -164,7 +165,7 @@ function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): voi
   }).join("");
   box.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th scope="col">Year</th><th scope="col">House votes D / R</th><th scope="col">House seats</th>
-      <th scope="col">Seat gap</th><th scope="col">Uncontested</th>
+      <th scope="col">Gap, points</th><th scope="col">Gap, seats</th><th scope="col">Uncontested</th>
       <th scope="col">President D / R</th><th scope="col">Electors</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }

@@ -1,8 +1,8 @@
 import "./style.css";
-import { drawList, type ListState } from "./list";
+import { drawList, SORT_KEYS, type ListState } from "./list";
 import { COLOR_BY, drawMap, type ColorBy } from "./map";
 import {
-  buildRows, formatGap, formatSeats, nationalRow, pct, type District, type Office, type Row, type Summary,
+  buildRows, formatGap, formatSeatGap, formatSeats, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
 } from "./shares";
 import { drawState } from "./state";
 import { escapeHtml, select } from "./ui";
@@ -21,8 +21,8 @@ const districtCache = new Map<number, Promise<Record<string, District[]>>>();
 // View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024
 let office: Office = "house";
 let year = 2024;
-let colorBy: ColorBy = "gap";
-let sort: ListState = { key: "absGap", descending: true };
+let colorBy: ColorBy = "seatGap";
+let sort: ListState = { key: "seatGap", descending: true };
 
 function loadDistricts(y: number): Promise<Record<string, District[]>> {
   if (!districtCache.has(y)) {
@@ -57,7 +57,7 @@ function readHash(): { view: "overview" } | { view: "state"; po: string; year?: 
   const by = params.get("by");
   if (by && COLOR_BY.some((c) => c.value === by)) colorBy = by as ColorBy;
   const s = params.get("sort")?.match(/^(\w+)-(asc|desc)$/);
-  if (s) sort = { key: s[1] as ListState["key"], descending: s[2] === "desc" };
+  if (s && SORT_KEYS.includes(s[1] as SortKey)) sort = { key: s[1] as SortKey, descending: s[2] === "desc" };
   return { view: "overview" };
 }
 
@@ -112,8 +112,8 @@ function renderOverview(): void {
       <div class="v">D ${pct(national.seatShare.D)} · R ${pct(national.seatShare.R)}</div>
       <div class="s">${formatSeats(national.seats)} of ${national.totalSeats}</div></div>
     <div class="stat"><div class="k">Seat gap, nationally</div>
-      <div class="v">${formatGap(national.gap)}</div>
-      <div class="s">points of ${seatWord} beyond vote share</div></div>`;
+      <div class="v">${formatSeatGap(national.seatGap)} ${seatWord}</div>
+      <div class="s">${formatGap(national.gap)} points of ${seatWord} beyond vote share</div></div>`;
 
   const mapHead = document.createElement("div");
   mapHead.innerHTML = `<h2>Map</h2>`;
@@ -122,16 +122,19 @@ function renderOverview(): void {
   mapControls.append(select("Colour by", COLOR_BY, colorBy, (v) => { colorBy = v; go(overviewHash()); }));
   const mapNote = document.createElement("p");
   mapNote.className = "note";
-  mapNote.textContent = colorBy === "gap"
-    ? `Seat gap: how far a party's share of ${seatWord} ran ahead of its share of the vote. Click a state for its history.`
-    : "Click a state for its history.";
+  mapNote.textContent = (colorBy === "seatGap"
+    ? `Seat gap in ${seatWord}: how many more ${seatWord} a party won than a split in proportion to the vote would give it. `
+    : colorBy === "gap"
+      ? `Seat gap in points: how far a party's share of ${seatWord} ran ahead of its share of the vote. `
+      : "") + "Click a state for its history.";
   const mapBox = document.createElement("div");
   mapBox.className = "map-wrap";
 
   const listHead = document.createElement("div");
   listHead.innerHTML = `<h2>Vote share against ${office === "house" ? "seat" : "elector"} share</h2>
-    <p class="note">Sort by any column. Seat gap is half the difference between the two parties' over-
-    or under-representation, in percentage points.${office === "president"
+    <p class="note">Sort by any column; the gaps sort by size, whichever party they favour. The gap in points is
+    half the difference between the two parties' over- or under-representation. The gap in ${seatWord} is that times
+    the state's ${seatWord}: how many a party won beyond a split in proportion to the vote.${office === "president"
       ? " Electors go almost entirely to the statewide winner, so every state's gap is large." : ""}</p>`;
   const listBox = document.createElement("div");
 
