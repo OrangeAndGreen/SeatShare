@@ -535,10 +535,10 @@ td a {
   font-size: 12px;
 }
 
-/* Wider than the page on a wide screen, centred on it. */
+/* As wide as the window rather than the page, centred on it. */
 .breakout {
   position: relative;
   left: 50%;
   transform: translateX(-50%);
-  width: max(100%, min(1440px, calc(100vw - 48px)));
+  width: max(100%, calc(100vw - 48px));
 }

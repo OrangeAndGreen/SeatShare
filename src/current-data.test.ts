@@ -92,12 +92,6 @@ describe("currentLines", () => {
     expect(ga.rows.senate!.seats).toEqual(v(2, 0));
     expect(ga.rows.house!.seats).toEqual(v(5, 9));
   });
-  it("puts the Senate and House together for the delegation", () => {
-    const ga = states.find((l) => l.po === "GA")!.delegation!;
-    expect(ga.seats).toEqual(v(7, 9));
-    const s = states.find((l) => l.po === "GA")!.rows;
-    expect(ga.seatGap).toBeCloseTo(s.senate!.seatGap + s.house!.seatGap);
-  });
   it("adds the nation up from the states", () => {
     expect(national.rows.senate!.seats).toEqual(v(4, 2));
     expect(national.rows.president!.seats).toEqual(v(54, 33));
@@ -111,7 +105,8 @@ describe("currentLines", () => {
     expect(sortCurrent(states, "senate:next", false).map((l) => [l.po, nextUp(l)])).toEqual([["GA", 2026], ["OH", 2026], ["CA", 2028]]);
   });
   it("knows its sort keys", () => {
-    expect(isCurrentKey("delegation:seatGap")).toBe(true);
+    expect(isCurrentKey("house:seatGap")).toBe(true);
+    expect(isCurrentKey("delegation:seatGap")).toBe(false);
     expect(isCurrentKey("president:uncontested")).toBe(false);
     expect(isCurrentKey("statehouse:votes")).toBe(false);
   });

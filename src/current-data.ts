@@ -54,19 +54,11 @@ export function currentSeats(summary: Summary, po: string): SenateSeat[] {
   return [...seats.values()].sort((a, b) => a.next - b.next || a.seatClass - b.seatClass);
 }
 
-export interface Delegation {
-  /** Senate and House seats together. */
-  seats: Counts;
-  /** The Senate and House gaps in seats added up. + favours D. */
-  seatGap: number;
-}
-
 export interface CurrentLine {
   po: string;
   name: string;
   rows: Partial<Record<Federal, Row>>;
   senators: SenateSeat[];
-  delegation?: Delegation;
 }
 
 /** The latest year an office was elected. */
@@ -80,18 +72,6 @@ function zero(): Counts {
 
 function add(into: Counts, c: Counts): void {
   for (const p of PARTIES) into[p] += c[p];
-}
-
-function delegation(rows: CurrentLine["rows"]): Delegation | undefined {
-  if (!rows.senate && !rows.house) return undefined;
-  const seats = zero();
-  let seatGap = 0;
-  for (const row of [rows.senate, rows.house]) {
-    if (!row) continue;
-    add(seats, row.seats);
-    seatGap += row.seatGap;
-  }
-  return { seats, seatGap };
 }
 
 /** The Senate as it stands: the current seats' votes added up, one seat each. */
@@ -117,7 +97,7 @@ export function currentLines(summary: Summary): { national: CurrentLine; states:
     const senate = senateRow(s.po, s.name, senators);
     if (senate) rows.senate = senate;
     if (house[s.po]) rows.house = makeRow(s.po, s.name, house[s.po]);
-    return { po: s.po, name: s.name, rows, senators, delegation: delegation(rows) };
+    return { po: s.po, name: s.name, rows, senators };
   }).filter((l) => Object.keys(l.rows).length);
 
   const rows: CurrentLine["rows"] = {};
@@ -135,13 +115,13 @@ export function currentLines(summary: Summary): { national: CurrentLine; states:
     rows[o] = makeRow(NATIONAL, "United States", { votes, seats, uncontested });
   }
   return {
-    national: { po: NATIONAL, name: "United States", rows, senators: states.flatMap((l) => l.senators), delegation: delegation(rows) },
+    national: { po: NATIONAL, name: "United States", rows, senators: states.flatMap((l) => l.senators) },
     states,
   };
 }
 
 export type CurrentColumn = "votes" | "seats" | "gap" | "seatGap" | "uncontested" | "next";
-export type CurrentKey = "name" | `${Federal}:${CurrentColumn}` | "delegation:seats" | "delegation:seatGap";
+export type CurrentKey = "name" | `${Federal}:${CurrentColumn}`;
 
 /**
  * The columns each office shows, after the Senate's list of senators. Electors go to the
@@ -155,7 +135,6 @@ export const CURRENT_COLUMNS: Record<Federal, CurrentColumn[]> = {
 
 export const CURRENT_KEYS: CurrentKey[] = [
   "name", ...FEDERAL.flatMap((o) => CURRENT_COLUMNS[o].map((c) => `${o}:${c}` as CurrentKey)),
-  "delegation:seats", "delegation:seatGap",
 ];
 
 export function isCurrentKey(v: string): v is CurrentKey {
@@ -167,20 +146,10 @@ export function nextUp(line: CurrentLine): number | undefined {
   return line.senators.length ? Math.min(...line.senators.map((s) => s.next)) : undefined;
 }
 
-function shareMargin(c: Counts): number {
-  const t = c.D + c.R + c.O;
-  return t ? (c.D - c.R) / t : 0;
-}
-
 /** The value a column sorts by: margins from most Democratic, gaps by size. */
 export function sortValue(line: CurrentLine, key: Exclude<CurrentKey, "name">): number | undefined {
-  const [group, column] = key.split(":") as [Federal | "delegation", CurrentColumn];
-  if (group === "delegation") {
-    const d = line.delegation;
-    if (!d) return undefined;
-    return column === "seats" ? shareMargin(d.seats) : Math.abs(d.seatGap);
-  }
-  const row = line.rows[group];
+  const [office, column] = key.split(":") as [Federal, CurrentColumn];
+  const row = line.rows[office];
   if (!row) return undefined;
   switch (column) {
     case "votes": return voteMargin(row);
@@ -209,5 +178,6 @@ export function sortCurrent(lines: CurrentLine[], key: CurrentKey, descending: b
 
 /** A senator's own margin, Democratic minus Republican. */
 export function seatMarginText(seat: SenateSeat): string {
-  return formatMargin(shareMargin(seat.votes));
+  const { D, R, O } = seat.votes;
+  return formatMargin(D + R + O ? (D - R) / (D + R + O) : 0);
 }

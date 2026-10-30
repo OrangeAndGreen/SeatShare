@@ -1,10 +1,10 @@
-// The "Current" tab: every state's President, senators and House delegation as they
+// The "Current" tab: every state's President, senators and House members as they
 // stand, with the votes from the election that put each of them in office.
 
 import { officeSwatch } from "./compare";
 import {
   APPOINTED, CURRENT_COLUMNS, currentLines, latestYear, nextUp, seatMarginText, sortCurrent,
-  type CurrentColumn, type CurrentKey, type CurrentLine, type Delegation, type SenateSeat,
+  type CurrentColumn, type CurrentKey, type CurrentLine, type SenateSeat,
 } from "./current-data";
 import { formatGap, formatSeatGap, formatSeats, NATIONAL, officeName, pct, type Row, type Summary } from "./shares";
 import { FEDERAL, formatMargin, seatMargin, voteMargin, type Federal } from "./summary-data";
@@ -56,7 +56,7 @@ export function drawCurrent(
     <p class="note">The President and House elected in ${pres === house ? pres : `${pres} and ${house}`}, and each
     state's two senators from the last election for their seats. A state's Senate votes add up the races that elected
     its two senators, whichever years those were, and its gap in seats is how many more seats a party holds than a
-    split of those two in proportion to the votes. The delegation adds the Senate and House together. Margins are
+    split of those two in proportion to the votes. Margins are
     Democratic minus Republican share; hover one for each party's share. Sort by any column: margins sort from most
     Democratic, gaps by size whichever party they favour. Seats filled by appointment keep the votes of the last
     election for them. Vacancies and House specials since ${house} aren't shown.</p>`;
@@ -105,11 +105,6 @@ function senatorHtml(po: string, seat: SenateSeat): string {
   return `${dot}${escapeHtml(seat.winner)} (${party}) <span class="s">${won} · up ${seat.next}</span>`;
 }
 
-function delegationCell(d: Delegation | undefined, column: "seats" | "seatGap"): string {
-  if (!d) return `<span class="muted">-</span>`;
-  return column === "seats" ? formatSeats(d.seats) || "-" : formatSeatGap(d.seatGap);
-}
-
 function drawTable(
   box: HTMLElement, national: CurrentLine, states: CurrentLine[], sort: CurrentState["sort"],
   onSort: (s: CurrentState["sort"]) => void,
@@ -122,12 +117,10 @@ function drawTable(
   };
   const span = (o: Federal) => CURRENT_COLUMNS[o].length + (o === "senate" ? 1 : 0);
   const groups = `<tr><th></th>${offices.map((o) =>
-    `<th scope="colgroup" colspan="${span(o)}" class="group">${officeSwatch(o)} ${officeName(o)}</th>`).join("")}
-    <th scope="colgroup" colspan="2" class="group">Delegation</th></tr>`;
+    `<th scope="colgroup" colspan="${span(o)}" class="group">${officeSwatch(o)} ${officeName(o)}</th>`).join("")}</tr>`;
   const officeHeads = (o: Federal) => (o === "senate" ? `<th scope="col" class="first">Senators</th>` : "")
     + CURRENT_COLUMNS[o].map((c, i) => th(`${o}:${c}`, COLUMN_LABEL[c](o), i === 0 && o !== "senate" ? "first" : "")).join("");
-  const cols = `<tr>${th("name", "State")}${offices.map(officeHeads).join("")}
-    ${th("delegation:seats", "Seats", "first")}${th("delegation:seatGap", "Gap, seats")}</tr>`;
+  const cols = `<tr>${th("name", "State")}${offices.map(officeHeads).join("")}</tr>`;
 
   const officeCells = (l: CurrentLine, o: Federal) => {
     const senators = o !== "senate" ? ""
@@ -137,8 +130,7 @@ function drawTable(
       `<td${i === 0 && o !== "senate" ? ` class="first"` : ""}>${cell(l, o, c)}</td>`).join("");
   };
   const line = (l: CurrentLine, cls = "") => `<tr class="${cls}"><td>${l.po === NATIONAL ? l.name
-    : `<a href="#/state/${l.po}">${escapeHtml(l.name)}</a>`}</td>${offices.map((o) => officeCells(l, o)).join("")}
-    <td class="first">${delegationCell(l.delegation, "seats")}</td><td>${delegationCell(l.delegation, "seatGap")}</td></tr>`;
+    : `<a href="#/state/${l.po}">${escapeHtml(l.name)}</a>`}</td>${offices.map((o) => officeCells(l, o)).join("")}</tr>`;
 
   box.innerHTML = `<div class="table-wrap breakout"><table class="summary-table current-table">
     <thead>${groups}${cols}</thead>
