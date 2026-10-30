@@ -10,6 +10,8 @@ import {
 } from "./trend-data";
 import { drawTrends, type TrendState } from "./trends";
 import { escapeHtml, select } from "./ui";
+import { drawUnity } from "./unity";
+import { chamberFile, readUnityParams, unityHash, type Chamber, type Member, type UnityIndex, type UnityState } from "./unity-data";
 
 const app = document.getElementById("app")!;
 const tabs = document.getElementById("tabs")!;
@@ -19,13 +21,43 @@ let summary: Summary;
 const districtCache = new Map<number, Promise<Record<string, District[]>>>();
 
 // View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024?chart=statehouse,
-// #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024
+// #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024, #/unity?congress=118&chamber=house&sort=score-desc
 let office: Office = "house";
 let year = 2024;
 let colorBy: ColorBy = "seatGap";
 let sort: ListState = { key: "seatGap", descending: true };
 let chartChamber: ChartChamber = "house";
 let trend: TrendState = { office: "house", offices: parseOffices(null), area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
+let unity: UnityState = { congress: 0, chamber: "house", party: "all", sort: { key: "score", descending: true } };
+
+// Party-line voting is a separate data set, loaded the first time its tab opens.
+let unityIndex: Promise<UnityIndex> | undefined;
+const unityCache = new Map<string, Promise<Member[]>>();
+
+function loadJson<T>(path: string): Promise<T> {
+  return fetch(dataUrl(path)).then((r) => {
+    if (!r.ok) throw new Error(r.statusText);
+    return r.json() as Promise<T>;
+  });
+}
+
+function loadUnityIndex(): Promise<UnityIndex> {
+  unityIndex ??= loadJson<UnityIndex>("unity/index.json").catch((e) => {
+    unityIndex = undefined;
+    throw e;
+  });
+  return unityIndex;
+}
+
+function loadUnityMembers(chamber: Chamber, congress: number): Promise<Member[]> {
+  const file = chamberFile(chamber, congress);
+  if (!unityCache.has(file)) unityCache.set(file, loadJson<Member[]>(file));
+  return unityCache.get(file)!;
+}
+
+function unityTabHash(): string {
+  return unity.congress ? unityHash(unity) : "#/unity";
+}
 
 function loadDistricts(y: number): Promise<Record<string, District[]>> {
   if (!districtCache.has(y)) {
@@ -52,7 +84,8 @@ function go(hash: string): void {
   else location.hash = hash;
 }
 
-type Route = { view: "overview" } | { view: "trends" } | { view: "state"; po: string; year?: number };
+type Route = { view: "overview" } | { view: "trends" } | { view: "unity"; query: string }
+  | { view: "state"; po: string; year?: number };
 
 function readHash(): Route {
   const [path, query = ""] = location.hash.replace(/^#\/?/, "").split("?");
@@ -61,6 +94,7 @@ function readHash(): Route {
     readTrendParams(new URLSearchParams(query));
     return { view: "trends" };
   }
+  if (parts[0] === "unity") return { view: "unity", query };
   if (parts[0] === "state" && parts[1]) {
     const chart = new URLSearchParams(query).get("chart");
     chartChamber = isChartChamber(chart) ? chart : "house";
@@ -98,7 +132,8 @@ function renderTabs(route: Route): void {
   const tab = (href: string, text: string, current: boolean) =>
     `<a href="${href}"${current ? ` aria-current="page"` : ""}>${text}</a>`;
   tabs.innerHTML = tab(overviewHash(), "By election", route.view === "overview")
-    + tab(trendHash(trend), "Over time", route.view === "trends");
+    + tab(trendHash(trend), "Over time", route.view === "trends")
+    + tab(unityTabHash(), "Party lines", route.view === "unity");
 }
 
 function render(): void {
@@ -107,6 +142,11 @@ function render(): void {
   if (route.view === "trends") {
     document.title = "Over time - SeatShare";
     drawTrends(app, summary, trend, (t) => go(trendHash(t)));
+    return;
+  }
+  if (route.view === "unity") {
+    document.title = "Party lines - SeatShare";
+    renderUnity(route.query);
     return;
   }
   if (route.view === "state") {
@@ -214,6 +254,25 @@ const LEGISLATURE_NOTE = ` Seats are the seats up that year, so a senate with st
   leave uncontested races off the ballot, so those seats add no votes and pull the winners' vote share down.
   In a district electing several members each voter's votes count once. Virginia, New Jersey and Mississippi vote in
   odd years, which count for the next even year. Data: Carl Klarner's State Legislative Election Returns, 1968-2022.`;
+
+function renderUnity(query: string): void {
+  app.innerHTML = `<p class="loading">Loading roll calls…</p>`;
+  const at = location.hash;
+  loadUnityIndex().then((index) => {
+    if (location.hash !== at) return; // the reader moved on while it loaded
+    unity = readUnityParams(new URLSearchParams(query), index, unity);
+    const hash = unityHash(unity);
+    if (location.hash !== hash) history.replaceState(null, "", hash);
+    renderTabs({ view: "unity", query });
+    drawUnity(app, index, unity, loadUnityMembers, (st, redrawOnly) => {
+      unity = st;
+      if (redrawOnly) history.replaceState(null, "", unityHash(st));
+      else go(unityHash(st));
+    });
+  }).catch(() => {
+    app.innerHTML = `<p class="error">Could not load the roll-call data.</p>`;
+  });
+}
 
 function nearest(years: number[], y: number): number {
   return years.reduce((best, v) => (Math.abs(v - y) < Math.abs(best - y) ? v : best), years[0]);

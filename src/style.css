@@ -447,6 +447,31 @@ td a {
   margin-right: 4px;
 }
 
+/* Party lines */
+.unity-table tr.unranked td,
+.unity-table tr.unranked td a {
+  color: var(--muted);
+}
+
+.unity-table th:nth-child(2),
+.unity-table td:nth-child(2),
+.unity-table th:nth-child(3),
+.unity-table td:nth-child(3),
+.unity-table th:nth-child(4),
+.unity-table td:nth-child(4) {
+  text-align: left;
+}
+
+@media (min-width: 700px) {
+  .stat.wide {
+    grid-column: span 2;
+  }
+}
+
+.unity-table td .bar {
+  width: 96px;
+}
+
 /* Tooltip */
 .tip {
   position: fixed;
