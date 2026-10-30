@@ -66,6 +66,35 @@ How the state legislature file is read:
 Electoral votes are the state's House seats plus two (DC has three), winner-take-all
 except the recorded Maine and Nebraska district splits. Faithless electors are ignored.
 
+## Party lines
+
+`scripts/build_unity.py` builds the "Party lines" tab from [Voteview](https://voteview.com)'s
+roll calls (Lewis, Poole, Rosenthal, Boche, Rudkin and Sonnet), which need no key. It
+downloads the members, votes and roll-call CSVs for each Congress and chamber into
+`data/raw/voteview/` (about 475 MB for the 80th-119th Congresses, not committed) and
+writes one small file per chamber and Congress to `public/data/unity/`, with
+`index.json` holding each one's party averages.
+
+```
+python scripts/build_unity.py            # 80th (1947) to 119th Congress
+python scripts/build_unity.py 100 119    # or any range of Congresses
+```
+
+The measure is Congressional Quarterly's party unity:
+
+- A party-unity vote is a roll call where most voting Democrats voted against most
+  voting Republicans. Only Yea and Nay count; paired and announced positions, Present
+  and not voting don't.
+- A member's score is the share of the party-unity votes they cast where they voted
+  with their party's majority. Breaks are the votes against it.
+- Independents are scored against the party they voted with more often on those
+  votes (the one they caucus with, in practice), and don't count toward either
+  party's majority. Voteview gives a member who changed party a new id, so they are
+  listed once for each party.
+- Delegates and the resident commissioner are left out.
+- Members who cast fewer than a quarter of the party-unity votes (at least 10) are
+  listed but not ranked, and are left out of the party averages.
+
 ## Site
 
 Vite + TypeScript + D3. `npm run dev` to work on it, `npm test` for the unit tests.
