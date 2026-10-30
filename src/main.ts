@@ -5,6 +5,8 @@ import {
   buildRows, isLegislature, isOffice, OFFICES, formatGap, formatSeatGap, formatSeats, NATIONAL, nationalRow, pct, type District, type Office, type Row, type SortKey, type Summary,
 } from "./shares";
 import { drawState, isChartChamber, type ChartChamber } from "./state";
+import { drawSummary, type SummaryState } from "./summary";
+import { isSummaryKey, summaryYears } from "./summary-data";
 import {
   COMPARE, formatOffices, isCompareMetric, METRICS, parseOffices, trendYears, type Metric,
 } from "./trend-data";
@@ -21,6 +23,7 @@ let summary: Summary;
 const districtCache = new Map<number, Promise<Record<string, District[]>>>();
 
 // View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024?chart=statehouse,
+// #/summary?area=US&year=2024&sort=house:seatGap-desc,
 // #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024, #/unity?congress=118&chamber=house&sort=score-desc
 let office: Office = "house";
 let year = 2024;
@@ -28,6 +31,7 @@ let colorBy: ColorBy = "seatGap";
 let sort: ListState = { key: "seatGap", descending: true };
 let chartChamber: ChartChamber = "house";
 let trend: TrendState = { office: "house", offices: parseOffices(null), area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
+let overall: SummaryState = { area: NATIONAL, year: 0, sort: { key: "house:seatGap", descending: true } };
 let unity: UnityState = { congress: 0, chamber: "house", party: "all", sort: { key: "score", descending: true } };
 
 // Party-line voting is a separate data set, loaded the first time its tab opens.
@@ -79,12 +83,16 @@ function trendHash(t: TrendState): string {
     + `&from=${t.from}&to=${t.to}`;
 }
 
+function summaryHash(s: SummaryState): string {
+  return `#/summary?area=${s.area}&year=${s.year}&sort=${s.sort.key}-${s.sort.descending ? "desc" : "asc"}`;
+}
+
 function go(hash: string): void {
   if (location.hash === hash) render();
   else location.hash = hash;
 }
 
-type Route = { view: "overview" } | { view: "trends" } | { view: "unity"; query: string }
+type Route = { view: "overview" } | { view: "summary" } | { view: "trends" } | { view: "unity"; query: string }
   | { view: "state"; po: string; year?: number };
 
 function readHash(): Route {
@@ -93,6 +101,10 @@ function readHash(): Route {
   if (parts[0] === "trends") {
     readTrendParams(new URLSearchParams(query));
     return { view: "trends" };
+  }
+  if (parts[0] === "summary") {
+    readSummaryParams(new URLSearchParams(query));
+    return { view: "summary" };
   }
   if (parts[0] === "unity") return { view: "unity", query };
   if (parts[0] === "state" && parts[1]) {
@@ -110,6 +122,16 @@ function readHash(): Route {
   const s = params.get("sort")?.match(/^(\w+)-(asc|desc)$/);
   if (s && SORT_KEYS.includes(s[1] as SortKey)) sort = { key: s[1] as SortKey, descending: s[2] === "desc" };
   return { view: "overview" };
+}
+
+function readSummaryParams(params: URLSearchParams): void {
+  const area = params.get("area")?.toUpperCase();
+  if (area && (area === NATIONAL || summary.states.some((s) => s.po === area))) overall.area = area;
+  const years = summaryYears(summary);
+  const y = Number(params.get("year"));
+  overall.year = years.includes(y) ? y : years.includes(overall.year) ? overall.year : years[years.length - 1];
+  const s = params.get("sort")?.match(/^([\w:]+)-(asc|desc)$/);
+  if (s && isSummaryKey(s[1])) overall.sort = { key: s[1], descending: s[2] === "desc" };
 }
 
 function readTrendParams(params: URLSearchParams): void {
@@ -132,6 +154,7 @@ function renderTabs(route: Route): void {
   const tab = (href: string, text: string, current: boolean) =>
     `<a href="${href}"${current ? ` aria-current="page"` : ""}>${text}</a>`;
   tabs.innerHTML = tab(overviewHash(), "By election", route.view === "overview")
+    + tab(summaryHash({ ...overall, year: overall.year || summaryYears(summary).at(-1)! }), "Summary", route.view === "summary")
     + tab(trendHash(trend), "Over time", route.view === "trends")
     + tab(unityTabHash(), "Party lines", route.view === "unity");
 }
@@ -142,6 +165,15 @@ function render(): void {
   if (route.view === "trends") {
     document.title = "Over time - SeatShare";
     drawTrends(app, summary, trend, (t) => go(trendHash(t)));
+    return;
+  }
+  if (route.view === "summary") {
+    document.title = "Summary - SeatShare";
+    drawSummary(app, summary, overall, (s, redrawOnly) => {
+      overall = s;
+      if (redrawOnly) history.replaceState(null, "", summaryHash(s));
+      else go(summaryHash(s));
+    });
     return;
   }
   if (route.view === "unity") {

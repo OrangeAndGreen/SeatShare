@@ -8,7 +8,7 @@ import { cssVar, hideTip, showTip } from "./ui";
 
 // Office colours avoid the party blue and red. Each office also has its own marker
 // shape and an end label, since lines cross and some colours are close for colour blindness.
-const SYMBOL: Record<Office, d3.SymbolType> = {
+export const SYMBOL: Record<Office, d3.SymbolType> = {
   house: d3.symbolCircle,
   senate: d3.symbolTriangle,
   president: d3.symbolDiamond,
@@ -16,7 +16,7 @@ const SYMBOL: Record<Office, d3.SymbolType> = {
   statesenate: d3.symbolWye,
 };
 
-const SHORT: Record<Office, string> = {
+export const SHORT: Record<Office, string> = {
   house: "House", senate: "Senate", president: "Pres", statehouse: "St House", statesenate: "St Sen",
 };
 

@@ -508,3 +508,18 @@ td a {
     display: none;
   }
 }
+
+/* Summary */
+.summary-table th.group {
+  text-align: center;
+  color: var(--text);
+}
+
+.summary-table th.group svg {
+  vertical-align: -2px;
+}
+
+.summary-table .group,
+.summary-table .first {
+  border-left: 1px solid var(--line);
+}
