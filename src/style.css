@@ -523,3 +523,22 @@ td a {
 .summary-table .first {
   border-left: 1px solid var(--line);
 }
+
+/* Current */
+.current-table td.senators {
+  text-align: left;
+  line-height: 1.5;
+}
+
+.current-table td.senators .s {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+/* Wider than the page on a wide screen, centred on it. */
+.breakout {
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max(100%, min(1440px, calc(100vw - 48px)));
+}

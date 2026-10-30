@@ -46,6 +46,11 @@ How the Senate file is read:
   `SENATE_FIXES` in the script.
 - Independents (Sanders, King, Lieberman in 2006, Murkowski's 2010 write-in) count
   as Other.
+- The file has no Connecticut 2022 race; the certified result is added from
+  `SENATE_MISSING` in the script.
+- Each race keeps its own votes and the seat class it filled, which the "Current" tab
+  uses to find each state's two sitting senators. A regular race's class follows from
+  its year; specials since 2018 are listed in `SENATE_SPECIAL_CLASSES`.
 
 How the state legislature file is read:
 

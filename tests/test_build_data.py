@@ -120,6 +120,22 @@ class SenateTest(unittest.TestCase):
         self.assertEqual(c["votes"]["D"], 619402)
 
 
+    def test_missing_race_added_once(self):
+        rows = b.missing_senate_rows([])
+        c = b.senate_contests(rows)[(2022, "CT", False)]
+        self.assertEqual(c["party"], "D")
+        self.assertEqual(c["votes"], {"D": 723864, "R": 535943, "O": 80})
+        self.assertEqual(b.missing_senate_rows([{"year": "2022", "state_po": "CT"}]), [])
+
+    def test_seat_class_from_year_or_special_table(self):
+        self.assertEqual(b.senate_class(2024, "PA", False), 1)
+        self.assertEqual(b.senate_class(2020, "GA", False), 2)
+        self.assertEqual(b.senate_class(2022, "GA", False), 3)
+        self.assertEqual(b.senate_class(2020, "GA", True), 3)
+        self.assertEqual(b.senate_class(2024, "NE", True), 2)
+        self.assertIsNone(b.senate_class(2010, "NY", True))
+
+
 class ElectorsTest(unittest.TestCase):
     def test_winner_take_all(self):
         self.assertEqual(b.electoral_votes(9, 2024, "MA", "D"), {"D": 11, "R": 0, "O": 0})
@@ -136,6 +152,8 @@ class NamesTest(unittest.TestCase):
         self.assertEqual(b.display_name("BYRD, HARRY F., JR."), "Harry F. Byrd Jr.")
         self.assertEqual(b.display_name("Angus S. King, Jr."), "Angus S. King Jr.")
         self.assertEqual(b.display_name("BERNIE SANDERS"), "Bernie Sanders")
+        self.assertEqual(b.display_name("MITCH MCCONNELL"), "Mitch McConnell")
+        self.assertEqual(b.display_name('"BILL" CASSIDY'), '"Bill" Cassidy')
 
     def test_state_name(self):
         self.assertEqual(b.state_name("DISTRICT OF COLUMBIA"), "District of Columbia")

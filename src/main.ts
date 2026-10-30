@@ -1,4 +1,6 @@
 import "./style.css";
+import { drawCurrent, type CurrentState } from "./current";
+import { isCurrentKey } from "./current-data";
 import { drawList, SORT_KEYS, type ListState } from "./list";
 import { COLOR_BY, drawMap, type ColorBy } from "./map";
 import {
@@ -24,7 +26,7 @@ const districtCache = new Map<number, Promise<Record<string, District[]>>>();
 
 // View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024?chart=statehouse,
 // #/summary?area=US&from=2016&to=2024&sort=house:seatGap-desc,
-// #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024, #/unity?congress=118&chamber=house&sort=score-desc
+// #/current?sort=senate:votes-desc, #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024, #/unity?congress=118&chamber=house&sort=score-desc
 let office: Office = "house";
 let year = 2024;
 let colorBy: ColorBy = "seatGap";
@@ -32,6 +34,7 @@ let sort: ListState = { key: "seatGap", descending: true };
 let chartChamber: ChartChamber = "house";
 let trend: TrendState = { office: "house", offices: parseOffices(null), area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
 let overall: SummaryState = { area: NATIONAL, from: 0, to: 0, sort: { key: "house:seatGap", descending: true } };
+let current: CurrentState = { sort: { key: "name", descending: false } };
 let unity: UnityState = { congress: 0, chamber: "house", party: "all", sort: { key: "score", descending: true } };
 
 // Party-line voting is a separate data set, loaded the first time its tab opens.
@@ -87,12 +90,16 @@ function summaryHash(s: SummaryState): string {
   return `#/summary?area=${s.area}&from=${s.from}&to=${s.to}&sort=${s.sort.key}-${s.sort.descending ? "desc" : "asc"}`;
 }
 
+function currentHash(c: CurrentState): string {
+  return `#/current?sort=${c.sort.key}-${c.sort.descending ? "desc" : "asc"}`;
+}
+
 function go(hash: string): void {
   if (location.hash === hash) render();
   else location.hash = hash;
 }
 
-type Route = { view: "overview" } | { view: "summary" } | { view: "trends" } | { view: "unity"; query: string }
+type Route = { view: "overview" } | { view: "summary" } | { view: "current" } | { view: "trends" } | { view: "unity"; query: string }
   | { view: "state"; po: string; year?: number };
 
 function readHash(): Route {
@@ -105,6 +112,11 @@ function readHash(): Route {
   if (parts[0] === "summary") {
     readSummaryParams(new URLSearchParams(query));
     return { view: "summary" };
+  }
+  if (parts[0] === "current") {
+    const s = new URLSearchParams(query).get("sort")?.match(/^([\w:]+)-(asc|desc)$/);
+    if (s && isCurrentKey(s[1])) current = { sort: { key: s[1], descending: s[2] === "desc" } };
+    return { view: "current" };
   }
   if (parts[0] === "unity") return { view: "unity", query };
   if (parts[0] === "state" && parts[1]) {
@@ -157,6 +169,7 @@ function renderTabs(route: Route): void {
     `<a href="${href}"${current ? ` aria-current="page"` : ""}>${text}</a>`;
   tabs.innerHTML = tab(overviewHash(), "By election", route.view === "overview")
     + tab(summaryHash(overall.to ? overall : { ...overall, from: summaryYears(summary).at(-1)!, to: summaryYears(summary).at(-1)! }), "Summary", route.view === "summary")
+    + tab(currentHash(current), "Current", route.view === "current")
     + tab(trendHash(trend), "Over time", route.view === "trends")
     + tab(unityTabHash(), "Party lines", route.view === "unity");
 }
@@ -175,6 +188,14 @@ function render(): void {
       overall = s;
       if (redrawOnly) history.replaceState(null, "", summaryHash(s));
       else go(summaryHash(s));
+    });
+    return;
+  }
+  if (route.view === "current") {
+    document.title = "Current - SeatShare";
+    drawCurrent(app, summary, current, (c) => {
+      current = c;
+      history.replaceState(null, "", currentHash(c));
     });
     return;
   }

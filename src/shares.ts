@@ -40,6 +40,10 @@ export interface SenateRace {
   winner: string;
   party: Party;
   special: boolean;
+  /** The race's own votes; a state's result adds up its races. */
+  votes?: Counts;
+  /** The seat class it filled: I up in 2024, II in 2026, III in 2028. Missing for older specials. */
+  class?: 1 | 2 | 3;
 }
 
 export interface StateResult {

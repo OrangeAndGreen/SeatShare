@@ -182,6 +182,25 @@ SENATE_FIXES = {
     (2002, "LA", "SUZANNE HAIK TERRELL", 596642): [("RUNOFF", 596642)],
 }
 
+# Races missing from the Senate file, as (year, state, candidate, party line, votes).
+# Connecticut 2022 is from the Secretary of State's certified results.
+SENATE_MISSING = [
+    (2022, "CT", "RICHARD BLUMENTHAL", "DEMOCRAT", 701175),
+    (2022, "CT", "RICHARD BLUMENTHAL", "WORKING FAMILIES", 22689),
+    (2022, "CT", "LEORA LEVY", "REPUBLICAN", 535943),
+    (2022, "CT", "WRITEIN", "", 80),
+]
+
+
+def missing_senate_rows(rows):
+    """SENATE_MISSING as Senate file rows, for any race the file doesn't have."""
+    have = {(r["year"], r["state_po"]) for r in rows}
+    return [{"year": str(year), "state_po": state, "stage": "GEN", "special": "FALSE",
+             "candidate": name, "party_detailed": party, "party_simplified": party,
+             "candidatevotes": str(votes), "writein": "TRUE" if not party else "FALSE"}
+            for year, state, name, party, votes in SENATE_MISSING if (str(year), state) not in have]
+
+
 # Senate candidates filed with no party at all.
 SENATE_PARTIES = {
     (2020, "WY", "CYNTHIA M. LUMMIS"): R,
@@ -192,6 +211,22 @@ SENATE_PARTIES = {
     (2022, "AK", "KELLEY, BUZZ A."): R,
     (2022, "AK", "CHESBRO, PATRICIA R."): D,
 }
+
+
+# The seat class each special election filled, from 2018 on; a regular race's class
+# follows from its year. Older specials have since been superseded by regular races.
+SENATE_SPECIAL_CLASSES = {
+    (2018, "MN"): 2, (2018, "MS"): 2, (2020, "AZ"): 3, (2020, "GA"): 3,
+    (2022, "CA"): 3, (2022, "OK"): 2, (2024, "CA"): 1, (2024, "NE"): 2,
+}
+
+
+def senate_class(year, state, special):
+    """Class I seats were up in 2018 and 2024, II in 2020, III in 2022; None for an
+    older special whose seat isn't recorded."""
+    if special:
+        return SENATE_SPECIAL_CLASSES.get((year, state))
+    return {2: 1, 4: 2, 0: 3}[year % 6]
 
 
 def senate_label(row, year):
@@ -339,17 +374,23 @@ def display_name(raw):
     if len(parts) == 2:
         parts = [parts[1], parts[0]]
     raw = " ".join(parts + suffix)
-    return " ".join(w.capitalize() if not w.startswith('"') else '"' + w[1:].capitalize()
+    return " ".join(capitalize(w) if not w.startswith('"') else '"' + capitalize(w[1:])
                     for w in raw.split())
+
+
+def capitalize(word):
+    """'MCCONNELL' -> 'McConnell'."""
+    word = word.capitalize()
+    return "Mc" + word[2:].capitalize() if len(word) > 3 and word.startswith("Mc") else word
 
 
 def state_name(raw):
     return " ".join(w if w == "of" else w.capitalize() for w in raw.lower().split())
 
 
-def read_csv(path, dialect="excel"):
+def read_csv(path, dialect="excel", **fmt):
     with open(path, encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f, dialect=dialect))
+        return list(csv.DictReader(f, dialect=dialect, **fmt))
 
 
 def ensure_raw():
@@ -368,7 +409,8 @@ def build():
     ensure_raw()
     house_rows = read_csv(HOUSE_FILE)
     pres_rows = read_csv(PRESIDENT_FILE)
-    senate_rows = read_csv(SENATE_FILE, dialect="excel-tab")  # tab-separated despite the name
+    senate_rows = read_csv(SENATE_FILE, dialect="excel-tab", escapechar="\\")  # tab-separated despite the name, \" for a quote
+    senate_rows += missing_senate_rows(senate_rows)
     legislature_rows = read_csv(LEGISLATURE_FILE)
 
     states = {}
@@ -405,8 +447,12 @@ def build():
             s["votes"][p] += c["votes"][p]
         s["seats"][c["party"]] += 1
         s["uncontested"] += c["uncontested"]
-        s["races"].append({"winner": display_name(c["winner"]), "party": c["party"],
-                           "special": c["special"]})
+        race = {"winner": display_name(c["winner"]), "party": c["party"],
+                "special": c["special"], "votes": c["votes"]}
+        seat_class = senate_class(year, state, c["special"])
+        if seat_class:
+            race["class"] = seat_class
+        s["races"].append(race)
     summary.update(legislature_results(legislature_rows))
     candidates = {}
     for (year, state), p in sorted(pres.items()):
