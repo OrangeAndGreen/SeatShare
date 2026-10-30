@@ -17,7 +17,7 @@ export interface CurrentState {
 const COLUMN_LABEL: Record<CurrentColumn, (o: Federal) => string> = {
   votes: () => "Votes",
   seats: (o) => (o === "president" ? "Electors" : "Seats"),
-  gap: () => "Gap, pts",
+  gap: () => "Gap, %",
   seatGap: () => "Gap, seats",
   uncontested: () => "Uncontested",
   next: () => "Next up",
@@ -56,7 +56,8 @@ export function drawCurrent(
     <p class="note">The President and House elected in ${pres === house ? pres : `${pres} and ${house}`}, and each
     state's two senators from the last election for their seats. A state's Senate votes add up the races that elected
     its two senators, whichever years those were, and its gap in seats is how many more seats a party holds than a
-    split of those two in proportion to the votes. Margins are
+    split of those two in proportion to the votes. The gap in % is how far a party's share of the seats or electors
+    ran ahead of its share of the votes, averaged over the two parties; hover one for each party's shares. Margins are
     Democratic minus Republican share; hover one for each party's share. Sort by any column: margins sort from most
     Democratic, gaps by size whichever party they favour. Seats filled by appointment keep the votes of the last
     election for them. Vacancies and House specials since ${house} aren't shown.</p>`;
@@ -74,13 +75,19 @@ function shareTitle(row: Row): string {
   return `D ${pct(row.voteShare.D)} · R ${pct(row.voteShare.R)}${row.voteShare.O >= 0.0005 ? ` · Other ${pct(row.voteShare.O)}` : ""}`;
 }
 
+function gapTitle(row: Row, office: Federal): string {
+  const won = office === "president" ? "electors" : "seats";
+  return (["D", "R"] as const).map((p) =>
+    `${p}: ${pct(row.voteShare[p])} of votes, ${pct(row.seatShare[p])} of ${won}`).join(" · ");
+}
+
 function cell(line: CurrentLine, office: Federal, column: CurrentColumn): string {
   const row = line.rows[office];
   if (!row) return `<span class="muted">-</span>`;
   switch (column) {
     case "votes": return `<span title="${shareTitle(row)}">${formatMargin(voteMargin(row))}</span>`;
     case "seats": return `<span title="${formatMargin(seatMargin(row))}">${formatSeats(row.seats) || "-"}</span>`;
-    case "gap": return formatGap(row.gap);
+    case "gap": return `<span title="${gapTitle(row, office)}">${formatGap(row.gap)}</span>`;
     case "seatGap": return formatSeatGap(row.seatGap);
     case "uncontested": return row.uncontested ? String(row.uncontested) : `<span class="muted">0</span>`;
     case "next": {

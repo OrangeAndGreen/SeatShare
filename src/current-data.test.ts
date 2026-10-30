@@ -102,10 +102,14 @@ describe("currentLines", () => {
     expect(sortCurrent(states, "president:votes", true).map((l) => l.po)).toEqual(["CA", "GA", "OH"]);
     expect(sortCurrent(states, "house:seats", true).map((l) => l.po)).toEqual(["CA", "GA", "OH"]);
     expect(sortCurrent(states, "house:seats", false).map((l) => l.po)).toEqual(["GA", "CA", "OH"]);
+    // GA's House: 45% of votes, 36% of seats, gap R +9.3; CA's: 60% and 83%, gap D +22.7.
+    expect(sortCurrent(states, "house:gap", true).map((l) => l.po)).toEqual(["CA", "GA", "OH"]);
     expect(sortCurrent(states, "senate:next", false).map((l) => [l.po, nextUp(l)])).toEqual([["GA", 2026], ["OH", 2026], ["CA", 2028]]);
   });
   it("knows its sort keys", () => {
     expect(isCurrentKey("house:seatGap")).toBe(true);
+    expect(isCurrentKey("president:gap")).toBe(true);
+    expect(isCurrentKey("senate:gap")).toBe(true);
     expect(isCurrentKey("delegation:seatGap")).toBe(false);
     expect(isCurrentKey("president:uncontested")).toBe(false);
     expect(isCurrentKey("statehouse:votes")).toBe(false);

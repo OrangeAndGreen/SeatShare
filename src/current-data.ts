@@ -123,14 +123,11 @@ export function currentLines(summary: Summary): { national: CurrentLine; states:
 export type CurrentColumn = "votes" | "seats" | "gap" | "seatGap" | "uncontested" | "next";
 export type CurrentKey = "name" | `${Federal}:${CurrentColumn}`;
 
-/**
- * The columns each office shows, after the Senate's list of senators. Electors go to the
- * statewide winner, so a state's presidential gap only says who won and is left out.
- */
+/** The columns each office shows, after the Senate's list of senators. */
 export const CURRENT_COLUMNS: Record<Federal, CurrentColumn[]> = {
-  president: ["votes", "seats"],
-  senate: ["votes", "seats", "seatGap", "next"],
-  house: ["votes", "seats", "seatGap", "uncontested"],
+  president: ["votes", "seats", "gap"],
+  senate: ["votes", "seats", "gap", "seatGap", "next"],
+  house: ["votes", "seats", "gap", "seatGap", "uncontested"],
 };
 
 export const CURRENT_KEYS: CurrentKey[] = [
