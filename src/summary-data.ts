@@ -1,7 +1,7 @@
 // The "Summary" tab: President, Senate and House side by side, across elections and
 // state by state. Pure functions, no DOM.
 
-import { buildRows, makeRow, nationalRow, NATIONAL, type Row, type Summary } from "./shares";
+import { makeRow, NATIONAL, PARTIES, type Counts, type Row, type StateResult, type Summary } from "./shares";
 
 export type Federal = "president" | "senate" | "house";
 
@@ -23,14 +23,43 @@ export function summaryYears(summary: Summary): number[] {
 
 /** An office's result for the nation or one state, or none when it had no election there. */
 export function areaRow(summary: Summary, office: Federal, area: string, year: number): Row | undefined {
-  const results = summary.results[office][year];
-  if (!results) return undefined;
-  if (area === NATIONAL) {
-    const row = nationalRow(buildRows(summary.states, results));
-    return row.totalSeats ? row : undefined;
+  return rangeRow(summary, office, area, year, year);
+}
+
+/**
+ * An office's votes and seats added up over its elections from one year to another,
+ * for the nation (every state) or one state; none when it had no election there.
+ */
+export function rangeRow(
+  summary: Summary, office: Federal, area: string, from: number, to: number,
+): Row | undefined {
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  const sum: StateResult = { votes: zero(), seats: zero(), uncontested: 0 };
+  let any = false;
+  for (const year of summary.offices[office]) {
+    if (year < lo || year > hi) continue;
+    const results = summary.results[office][year] ?? {};
+    for (const po of area === NATIONAL ? Object.keys(results) : [area]) {
+      const r = results[po];
+      if (!r) continue;
+      any = true;
+      add(sum.votes, r.votes);
+      add(sum.seats, r.seats);
+      sum.uncontested! += r.uncontested ?? 0;
+    }
   }
-  const r = results[area];
-  return r ? makeRow(area, summary.states.find((s) => s.po === area)?.name ?? area, r) : undefined;
+  if (!any) return undefined;
+  const name = area === NATIONAL ? "United States" : summary.states.find((s) => s.po === area)?.name ?? area;
+  return makeRow(area, name, sum);
+}
+
+function zero(): Counts {
+  return { D: 0, R: 0, O: 0 };
+}
+
+function add(into: Counts, c: Counts): void {
+  for (const p of PARTIES) into[p] += c[p];
 }
 
 export type OfficeRows = Partial<Record<Federal, Row>>;
@@ -58,12 +87,14 @@ export interface StateLine {
   rows: OfficeRows;
 }
 
-/** The nation, then each state with any result that year. */
-export function stateLines(summary: Summary, year: number): { national: StateLine; states: StateLine[] } {
+/** The nation, then each state with any result from one year to another, added up. */
+export function stateLines(
+  summary: Summary, from: number, to: number,
+): { national: StateLine; states: StateLine[] } {
   const line = (po: string, name: string): StateLine => {
     const rows: OfficeRows = {};
     for (const o of FEDERAL) {
-      const row = areaRow(summary, o, po, year);
+      const row = rangeRow(summary, o, po, from, to);
       if (row) rows[o] = row;
     }
     return { po, name, rows };

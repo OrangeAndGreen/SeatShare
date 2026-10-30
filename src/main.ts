@@ -23,7 +23,7 @@ let summary: Summary;
 const districtCache = new Map<number, Promise<Record<string, District[]>>>();
 
 // View state, mirrored in the URL hash: #/house/2024?by=gap&sort=gap-desc, #/state/MA/2024?chart=statehouse,
-// #/summary?area=US&year=2024&sort=house:seatGap-desc,
+// #/summary?area=US&from=2016&to=2024&sort=house:seatGap-desc,
 // #/trends?office=house&area=US&metric=seatGap&from=1976&to=2024, #/unity?congress=118&chamber=house&sort=score-desc
 let office: Office = "house";
 let year = 2024;
@@ -31,7 +31,7 @@ let colorBy: ColorBy = "seatGap";
 let sort: ListState = { key: "seatGap", descending: true };
 let chartChamber: ChartChamber = "house";
 let trend: TrendState = { office: "house", offices: parseOffices(null), area: NATIONAL, metric: "seatGap", from: 1976, to: 2024 };
-let overall: SummaryState = { area: NATIONAL, year: 0, sort: { key: "house:seatGap", descending: true } };
+let overall: SummaryState = { area: NATIONAL, from: 0, to: 0, sort: { key: "house:seatGap", descending: true } };
 let unity: UnityState = { congress: 0, chamber: "house", party: "all", sort: { key: "score", descending: true } };
 
 // Party-line voting is a separate data set, loaded the first time its tab opens.
@@ -84,7 +84,7 @@ function trendHash(t: TrendState): string {
 }
 
 function summaryHash(s: SummaryState): string {
-  return `#/summary?area=${s.area}&year=${s.year}&sort=${s.sort.key}-${s.sort.descending ? "desc" : "asc"}`;
+  return `#/summary?area=${s.area}&from=${s.from}&to=${s.to}&sort=${s.sort.key}-${s.sort.descending ? "desc" : "asc"}`;
 }
 
 function go(hash: string): void {
@@ -128,8 +128,10 @@ function readSummaryParams(params: URLSearchParams): void {
   const area = params.get("area")?.toUpperCase();
   if (area && (area === NATIONAL || summary.states.some((s) => s.po === area))) overall.area = area;
   const years = summaryYears(summary);
-  const y = Number(params.get("year"));
-  overall.year = years.includes(y) ? y : years.includes(overall.year) ? overall.year : years[years.length - 1];
+  const pick = (v: number, kept: number) => (years.includes(v) ? v : years.includes(kept) ? kept : years[years.length - 1]);
+  const from = pick(Number(params.get("from")), overall.from);
+  const to = pick(Number(params.get("to")), overall.to);
+  [overall.from, overall.to] = from <= to ? [from, to] : [to, from];
   const s = params.get("sort")?.match(/^([\w:]+)-(asc|desc)$/);
   if (s && isSummaryKey(s[1])) overall.sort = { key: s[1], descending: s[2] === "desc" };
 }
@@ -154,7 +156,7 @@ function renderTabs(route: Route): void {
   const tab = (href: string, text: string, current: boolean) =>
     `<a href="${href}"${current ? ` aria-current="page"` : ""}>${text}</a>`;
   tabs.innerHTML = tab(overviewHash(), "By election", route.view === "overview")
-    + tab(summaryHash({ ...overall, year: overall.year || summaryYears(summary).at(-1)! }), "Summary", route.view === "summary")
+    + tab(summaryHash(overall.to ? overall : { ...overall, from: summaryYears(summary).at(-1)!, to: summaryYears(summary).at(-1)! }), "Summary", route.view === "summary")
     + tab(trendHash(trend), "Over time", route.view === "trends")
     + tab(unityTabHash(), "Party lines", route.view === "unity");
 }

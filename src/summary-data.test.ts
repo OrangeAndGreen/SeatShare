@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Summary } from "./shares";
 import {
-  areaRow, columnValue, formatMargin, isSummaryKey, seatMargin, sortLines, stateLines, summaryPoints, summaryYears,
+  areaRow, columnValue, rangeRow, formatMargin, isSummaryKey, seatMargin, sortLines, stateLines, summaryPoints, summaryYears,
   voteMargin,
 } from "./summary-data";
 
@@ -77,6 +77,21 @@ describe("margins", () => {
   });
 });
 
+describe("rangeRow", () => {
+  it("adds a state's votes and seats over the elections in the range", () => {
+    const nc = rangeRow(summary, "house", "NC", 2002, 2004)!;
+    expect(nc.votes).toEqual({ D: 95, R: 105, O: 0 });
+    expect(nc.seats).toEqual({ D: 9, R: 17, O: 0 });
+    expect(nc.seatGap).toBeCloseTo(26 * (9 / 26 - 0.475 - (17 / 26 - 0.525)) / 2);
+  });
+  it("adds every state for the nation, either way round", () => {
+    expect(rangeRow(summary, "house", "US", 2004, 2002)!.seats).toEqual({ D: 15, R: 29, O: 1 });
+  });
+  it("is missing when no election falls in the range", () => {
+    expect(rangeRow(summary, "president", "US", 2001, 2003)).toBeUndefined();
+  });
+});
+
 describe("summaryPoints", () => {
   it("has a point per year with whichever offices were up", () => {
     const points = summaryPoints(summary, "NC");
@@ -91,14 +106,23 @@ describe("summaryPoints", () => {
 
 describe("stateLines", () => {
   it("lists only the states with a result that year", () => {
-    const { national, states } = stateLines(summary, 2002);
+    const { national, states } = stateLines(summary, 2002, 2002);
     expect(states.map((s) => s.po)).toEqual(["NC"]);
     expect(national.rows.house!.seats).toEqual({ D: 6, R: 7, O: 0 });
   });
 });
 
+describe("stateLines over a range", () => {
+  it("lists a state with a result in any year, its offices added up", () => {
+    const { national, states } = stateLines(summary, 2002, 2004);
+    expect(states.map((s) => s.po)).toEqual(["VT", "NC", "OH"]);
+    expect(national.rows.house!.totalSeats).toBe(13 + 13 + 18 + 1);
+    expect(national.rows.senate!.totalSeats).toBe(2);
+  });
+});
+
 describe("sortLines", () => {
-  const { states } = stateLines(summary, 2004);
+  const { states } = stateLines(summary, 2004, 2004);
   const order = (key: Parameters<typeof sortLines>[1], desc: boolean) => sortLines(states, key, desc).map((s) => s.po);
 
   it("sorts margins from most Democratic", () => {

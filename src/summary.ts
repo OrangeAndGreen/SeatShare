@@ -12,7 +12,9 @@ import { cssVar, escapeHtml, hideTip, select, showTip } from "./ui";
 
 export interface SummaryState {
   area: string;
-  year: number;
+  /** The years the state list adds up, the same year for one election. */
+  from: number;
+  to: number;
   sort: { key: SummaryKey; descending: boolean };
 }
 
@@ -48,7 +50,7 @@ export function drawSummary(
   head.innerHTML = `<h2>Democratic minus Republican share: ${escapeHtml(areaName)}</h2>
     <p class="note">Each office's margin in the vote (solid) and in the ${st.area === NATIONAL ? "seats" : "seats or electors"}
     won (dashed), as one party's share less the other's. Senate seats are the seats up that year${
-    st.area === NATIONAL ? ", about a third of the Senate" : ""}. Click a year to list the states for it.</p>`;
+    st.area === NATIONAL ? ", about a third of the Senate" : ""}. Click a year to list the states for it alone.</p>`;
   const key = document.createElement("div");
   key.className = "series-key";
   const marginBox = document.createElement("div");
@@ -58,15 +60,23 @@ export function drawSummary(
     its two lines above. Above the line favours Democrats, below favours Republicans.</p>`;
   const gapBox = document.createElement("div");
 
+  const one = st.from === st.to;
   const listHead = document.createElement("div");
-  listHead.innerHTML = `<h2>Every state in ${st.year}</h2>
-    <p class="note">Margins are Democratic minus Republican share. Sort by any column: margins sort from most Democratic,
-    the gaps by size whichever party they favour, and states with no race for an office go last. Click a state to draw
-    it above.</p>`;
+  listHead.innerHTML = `<h2>Every state ${one ? `in ${st.from}` : `from ${st.from} to ${st.to}`}</h2>
+    <p class="note">Margins are Democratic minus Republican share.${one ? "" : ` Each office's votes and seats are added
+    up over its elections in these years, so the margins and gaps are for the period as a whole.`} Sort by any column:
+    margins sort from most Democratic, the gaps by size whichever party they favour, and states with no race for an
+    office go last. Click a state to draw it above.</p>`;
   const listControls = document.createElement("div");
   listControls.className = "controls";
-  listControls.append(select("Year", [...years].reverse().map((y) => ({ value: String(y), text: String(y) })),
-    String(st.year), (v) => onChange({ ...st, year: Number(v) })));
+  const yearOptions = [...years].reverse().map((y) => ({ value: String(y), text: String(y) }));
+  // Moving one end past the other drags it along, so the range never runs backwards.
+  listControls.append(
+    select("From", yearOptions, String(st.from),
+      (v) => onChange({ ...st, from: Number(v), to: Math.max(Number(v), st.to) })),
+    select("To", yearOptions, String(st.to),
+      (v) => onChange({ ...st, from: Math.min(Number(v), st.from), to: Number(v) })),
+  );
   const listBox = document.createElement("div");
 
   container.append(controls, head, key, marginBox, gapHead, gapBox, listHead, listControls, listBox);
@@ -75,7 +85,7 @@ export function drawSummary(
   if (!points.length) {
     marginBox.innerHTML = `<p class="note">No results for ${escapeHtml(areaName)}.</p>`;
   } else {
-    const onYear = (year: number) => onChange({ ...st, year });
+    const onYear = (year: number) => onChange({ ...st, from: year, to: year });
     const pick = (o: Federal, f: (r: Row) => number) =>
       points.flatMap((p) => (p.rows[o] ? [{ year: p.year, value: f(p.rows[o]!) }] : []));
     const margins: Series[] = FEDERAL.flatMap((o) => [
@@ -86,11 +96,11 @@ export function drawSummary(
 
     key.innerHTML = FEDERAL.map((o) => `<span>${officeSwatch(o)}${officeName(o)}</span>`).join("")
       + `<span>${lineSwatch(false)}Votes</span><span>${lineSwatch(true)}${st.area === NATIONAL ? "Seats" : "Seats, electors"}</span>`;
-    drawLines(marginBox, points, margins, st.year, 0.2, "Democratic minus Republican share of votes and seats by office and year", onYear);
-    drawLines(gapBox, points, gaps, st.year, 0.05, "Seat gap in points by office and year", onYear);
+    drawLines(marginBox, points, margins, [st.from, st.to], 0.2, "Democratic minus Republican share of votes and seats by office and year", onYear);
+    drawLines(gapBox, points, gaps, [st.from, st.to], 0.05, "Seat gap in points by office and year", onYear);
   }
 
-  const renderList = (sort: SummaryState["sort"]) => drawList(listBox, summary, st.year, sort, (s) => {
+  const renderList = (sort: SummaryState["sort"]) => drawList(listBox, summary, st.from, st.to, sort, (s) => {
     onChange({ ...st, sort: s }, true);
     renderList(s);
   }, (area) => {
@@ -109,7 +119,7 @@ function lineSwatch(dashed: boolean): string {
 const axisFormat = (v: number) => (v === 0 ? "Even" : formatMargin(v, 0));
 
 function drawLines(
-  box: HTMLElement, points: SummaryPoint[], series: Series[], selected: number,
+  box: HTMLElement, points: SummaryPoint[], series: Series[], [from, to]: [number, number],
   floor: number, aria: string, onYear: (year: number) => void,
 ): void {
   const width = 960;
@@ -143,10 +153,12 @@ function drawLines(
   svg.append("line").attr("stroke", cssVar("--muted"))
     .attr("x1", m.left).attr("x2", width - m.right).attr("y1", y(0)).attr("y2", y(0));
 
-  // The year listed below, as a band behind the lines.
-  if (years.includes(selected)) {
+  // The years listed below, as a band behind the lines.
+  const inRange = years.filter((y) => y >= from && y <= to);
+  if (inRange.length) {
+    const left = x(inRange[0])! - x.step() / 2;
     svg.append("rect").attr("fill", cssVar("--mid"))
-      .attr("x", x(selected)! - x.step() / 2).attr("width", x.step())
+      .attr("x", left).attr("width", x(inRange[inRange.length - 1])! + x.step() / 2 - left)
       .attr("y", m.top).attr("height", height - m.top - m.bottom);
   }
 
@@ -209,10 +221,10 @@ function cell(row: Row | undefined, column: Column): string {
 }
 
 function drawList(
-  box: HTMLElement, summary: Summary, year: number, sort: SummaryState["sort"],
+  box: HTMLElement, summary: Summary, from: number, to: number, sort: SummaryState["sort"],
   onSort: (s: SummaryState["sort"]) => void, onArea: (area: string) => void,
 ): void {
-  const { national, states } = stateLines(summary, year);
+  const { national, states } = stateLines(summary, from, to);
   const sorted = sortLines(states, sort.key, sort.descending);
   const offices = FEDERAL.filter((o) => national.rows[o]);
   const th = (k: SummaryKey, label: string, cls = "") => {
