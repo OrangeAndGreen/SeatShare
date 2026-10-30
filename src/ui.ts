@@ -64,3 +64,24 @@ export function shareBar(d: number, r: number): string {
     + (rest > 0.005 ? `<span style="width:${rest * 100}%;background:var(--line)"></span>` : "")
     + `<span style="width:${r * 100}%;background:var(--rep)"></span></span>`;
 }
+
+/** How deep a cell's shade runs, -1 (deepest R) to 1 (deepest D); 0 when the value is about even. */
+export function shadeLevel(value: number, extent: number): number {
+  const t = Math.max(-1, Math.min(1, value / extent));
+  return Math.abs(t) < 0.02 ? 0 : t;
+}
+
+/**
+ * A td's style shading it by a signed value: the panel colour at even, deepening to dark
+ * blue (+) or red (-) at `extent`. The text turns light where the light theme's shade is darkest.
+ */
+export function shade(value: number, extent: number): string {
+  const t = shadeLevel(value, extent);
+  if (!t) return "";
+  const mix = Math.round(Math.abs(t) * 100);
+  return ` style="background:color-mix(in oklab, var(--${t > 0 ? "dem" : "rep"}-cell) ${mix}%, var(--panel))${
+    mix >= 80 ? ";color:var(--shade-ink)" : ""}"`;
+}
+
+/** Where cell shades top out: vote and seat margins, and the gap in points. */
+export const SHADE = { votes: 0.5, seats: 1, gap: 0.3 } as const;

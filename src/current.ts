@@ -8,6 +8,7 @@ import {
 } from "./current-data";
 import { formatGap, formatSeatGap, formatSeats, NATIONAL, officeName, pct, type Row, type Summary } from "./shares";
 import { FEDERAL, formatMargin, seatMargin, voteMargin, type Federal } from "./summary-data";
+import { tint } from "./summary";
 import { escapeHtml, partyColor } from "./ui";
 
 export interface CurrentState {
@@ -134,7 +135,7 @@ function drawTable(
       : `<td class="first senators">${l.po === NATIONAL ? `<span class="s">${l.senators.length} senators</span>`
         : l.senators.map((s) => senatorHtml(l.po, s)).join("<br>") || `<span class="muted">-</span>`}</td>`;
     return senators + CURRENT_COLUMNS[o].map((c, i) =>
-      `<td${i === 0 && o !== "senate" ? ` class="first"` : ""}>${cell(l, o, c)}</td>`).join("");
+      `<td${i === 0 && o !== "senate" ? ` class="first"` : ""}${c === "uncontested" || c === "next" ? "" : tint(l.rows[o], c)}>${cell(l, o, c)}</td>`).join("");
   };
   const line = (l: CurrentLine, cls = "") => `<tr class="${cls}"><td>${l.po === NATIONAL ? l.name
     : `<a href="#/state/${l.po}">${escapeHtml(l.name)}</a>`}</td>${offices.map((o) => officeCells(l, o)).join("")}</tr>`;

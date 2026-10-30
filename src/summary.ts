@@ -8,7 +8,7 @@ import {
   COLUMNS, FEDERAL, formatMargin, seatMargin, sortLines, stateLines, summaryPoints, summaryYears, voteMargin,
   type Column, type Federal, type StateLine, type SummaryKey, type SummaryPoint,
 } from "./summary-data";
-import { cssVar, escapeHtml, hideTip, select, showTip } from "./ui";
+import { cssVar, escapeHtml, hideTip, select, shade, SHADE, showTip } from "./ui";
 
 export interface SummaryState {
   area: string;
@@ -220,6 +220,20 @@ function cell(row: Row | undefined, column: Column): string {
   }
 }
 
+/**
+ * The vote margin shades by its size, both gaps by the gap in points, so a big state's seats don't swamp it.
+ * Seats stay plain: winner-take-all electors and a state's senators would be solid colour.
+ */
+export function tint(row: Row | undefined, column: Column): string {
+  if (!row) return "";
+  switch (column) {
+    case "votes": return shade(voteMargin(row), SHADE.votes);
+    case "seats": return "";
+    case "gap":
+    case "seatGap": return shade(row.gap, SHADE.gap);
+  }
+}
+
 function drawList(
   box: HTMLElement, summary: Summary, from: number, to: number, sort: SummaryState["sort"],
   onSort: (s: SummaryState["sort"]) => void, onArea: (area: string) => void,
@@ -237,7 +251,7 @@ function drawList(
     COLUMNS[o].map((c, i) => th(`${o}:${c}`, COLUMN_LABEL[c](o), i === 0 ? "first" : "")).join("")).join("")}</tr>`;
   const line = (l: StateLine, cls = "") => `<tr class="${cls}"><td>${l.po === NATIONAL ? l.name
     : `<a href="#" data-area="${l.po}">${escapeHtml(l.name)}</a>`}</td>${offices.map((o) =>
-    COLUMNS[o].map((c, i) => `<td${i === 0 ? ` class="first"` : ""}>${cell(l.rows[o], c)}</td>`).join("")).join("")}</tr>`;
+    COLUMNS[o].map((c, i) => `<td${i === 0 ? ` class="first"` : ""}${tint(l.rows[o], c)}>${cell(l.rows[o], c)}</td>`).join("")).join("")}</tr>`;
 
   box.innerHTML = `<div class="table-wrap"><table class="summary-table">
     <thead>${groups}${cols}</thead>

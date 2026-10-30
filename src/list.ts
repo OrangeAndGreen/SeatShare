@@ -1,7 +1,7 @@
 // The sortable list: one row per state, vote share against seat share.
 
 import { formatGap, formatSeatGap, formatSeats, pct, sortRows, votesUnreliable, type Office, type Row, type SortKey } from "./shares";
-import { escapeHtml, shareBar } from "./ui";
+import { escapeHtml, shade, SHADE, shareBar } from "./ui";
 
 interface Column {
   key: SortKey;
@@ -10,6 +10,8 @@ interface Column {
   firstDescending: boolean;
   /** Greyed out when most of the state's seats have no votes recorded. */
   fromVotes?: boolean;
+  /** The cell's background shade, as `shade` gives it. */
+  tint?: (r: Row) => string;
 }
 
 const COLUMNS: Column[] = [
@@ -39,13 +41,17 @@ const COLUMNS: Column[] = [
   },
   {
     key: "gap", fromVotes: true, label: "Gap, points", firstDescending: true,
-    cell: (r) => formatGap(r.gap),
+    cell: (r) => formatGap(r.gap), tint: (r) => shade(r.gap, SHADE.gap),
   },
   {
     key: "seatGap", fromVotes: true, label: "Gap, seats", firstDescending: true,
-    cell: (r) => formatSeatGap(r.seatGap),
+    cell: (r) => formatSeatGap(r.seatGap), tint: (r) => shade(r.gap, SHADE.gap),
   },
 ];
+
+function tint(c: Column, r: Row): string {
+  return c.tint && !(c.fromVotes && votesUnreliable(r)) ? c.tint(r) : "";
+}
 
 function cell(c: Column, r: Row, office: Office): string {
   return c.fromVotes && votesUnreliable(r)
@@ -77,7 +83,7 @@ export function drawList(
   }).join("") + `<th scope="col">Split</th>`;
 
   const line = (r: Row, cls = "") =>
-    `<tr class="${cls}">${COLUMNS.map((c) => `<td>${cell(c, r, office)}</td>`).join("")}`
+    `<tr class="${cls}">${COLUMNS.map((c) => `<td${tint(c, r)}>${cell(c, r, office)}</td>`).join("")}`
     + `<td><span class="muted">${formatSeats(r.seats)}</span>${shareBar(r.seatShare.D, r.seatShare.R)}`
     + `${r.uncontested ? ` <span class="muted" title="Uncontested seats">· ${r.uncontested} unc.</span>` : ""}`
     + `${r.noVotes ? ` <span class="muted" title="Seats with no votes recorded">· ${r.noVotes} no votes</span>` : ""}</td></tr>`;

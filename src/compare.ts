@@ -4,7 +4,7 @@
 import * as d3 from "d3";
 import { formatGap, officeName, pct, type Office } from "./shares";
 import type { CompareSeries, Metric } from "./trend-data";
-import { cssVar, hideTip, showTip } from "./ui";
+import { cssVar, hideTip, shade, SHADE, showTip } from "./ui";
 
 // Office colours avoid the party blue and red. Each office also has its own marker
 // shape and an end label, since lines cross and some colours are close for colour blindness.
@@ -141,7 +141,11 @@ function tipHtml(year: number, series: CompareSeries[], metric: Metric): string 
 function drawTable(box: HTMLElement, series: CompareSeries[], metric: Metric, years: number[]): void {
   const body = [...years].reverse().map((yr) => `<tr><td>${yr}</td>${series.map((s) => {
     const v = valueIn(s, yr);
-    return `<td>${v === undefined ? `<span class="muted">-</span>` : formatCompare(v, metric)}</td>`;
+    if (v === undefined) return `<td><span class="muted">-</span></td>`;
+    // A share shades by how far it sits from half, as a margin would.
+    const tint = metric === "gap" ? shade(v, SHADE.gap)
+      : shade(2 * v - 1, metric === "seatShare" ? SHADE.seats : SHADE.votes);
+    return `<td${tint}>${formatCompare(v, metric)}</td>`;
   }).join("")}</tr>`).join("");
   box.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th scope="col">Year</th>${series.map((s) => `<th scope="col">${officeName(s.office)}</th>`).join("")}</tr></thead>

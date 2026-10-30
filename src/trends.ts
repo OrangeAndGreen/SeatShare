@@ -9,7 +9,7 @@ import {
   clampRange, COMPARE, COMPARE_METRICS, compareSeries, gapValue, isCompareMetric, METRICS, PER_PARTY, partiesShown,
   partyValue, trendPoints, trendYears, type Metric, type TrendOffice, type TrendPoint,
 } from "./trend-data";
-import { cssVar, escapeHtml, hideTip, partyColor, select, showTip } from "./ui";
+import { cssVar, escapeHtml, hideTip, partyColor, select, shade, SHADE, showTip } from "./ui";
 
 export interface TrendState {
   office: TrendOffice;
@@ -306,7 +306,7 @@ function drawTable(box: HTMLElement, points: TrendPoint[], office: Office): void
     <td>${pct(r.voteShare.D)}</td><td>${pct(r.voteShare.R)}</td>
     <td>${pct(r.seatShare.D)}</td><td>${pct(r.seatShare.R)}</td>
     <td>${formatSeats(r.seats)}</td>
-    <td>${formatGap(r.gap)}</td><td>${formatSeatGap(r.seatGap)}</td>
+    <td${shade(r.gap, SHADE.gap)}>${formatGap(r.gap)}</td><td${shade(r.gap, SHADE.gap)}>${formatSeatGap(r.seatGap)}</td>
     ${office !== "president" ? `<td>${r.uncontested || ""}</td>` : ""}
   </tr>`;
   box.innerHTML = `<div class="table-wrap"><table>

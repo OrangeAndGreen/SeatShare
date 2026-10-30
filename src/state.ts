@@ -3,10 +3,10 @@
 
 import * as d3 from "d3";
 import {
-  formatGap, formatSeatGap, formatSeats, makeRow, pct, shares, votesUnreliable,
+  formatGap, formatSeatGap, formatSeats, makeRow, margin, pct, shares, votesUnreliable,
   type District, type Row, type SenateRace, type StateInfo, type Summary,
 } from "./shares";
-import { cssVar, escapeHtml, hideTip, partyColor, select, showTip } from "./ui";
+import { cssVar, escapeHtml, hideTip, partyColor, select, shade, SHADE, showTip } from "./ui";
 
 export interface YearPoint {
   year: number;
@@ -215,6 +215,11 @@ export function senateWinners(races: SenateRace[] | undefined): string {
 
 function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): void {
   const cell = (r: Row | undefined, f: (r: Row) => string) => (r ? f(r) : `<span class="muted">-</span>`);
+  // Cells shaded by their margin or gap, left plain where the votes are mostly missing.
+  const td = (r: Row | undefined, f: (r: Row) => string, by?: "votes" | "gap") => {
+    const value = !r || !by || votesUnreliable(r) ? 0 : by === "votes" ? margin(r.voteShare) : r.gap;
+    return `<td${by ? shade(value, SHADE[by]) : ""}>${cell(r, f)}</td>`;
+  };
   const body = [...points].reverse().map((p) => {
     const nominees = summary.nominees[p.year];
     const presWinner = p.president
@@ -222,21 +227,21 @@ function drawYears(box: HTMLElement, points: YearPoint[], summary: Summary): voi
       : "";
     return `<tr>
       <td>${p.year}</td>
-      <td>${cell(p.house, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
-      <td>${cell(p.house, (r) => formatSeats(r.seats))}</td>
-      <td>${cell(p.house, (r) => formatGap(r.gap))}</td>
-      <td>${cell(p.house, (r) => formatSeatGap(r.seatGap))}</td>
-      <td>${cell(p.house, (r) => (r.uncontested ? String(r.uncontested) : ""))}</td>
-      <td>${cell(p.senate, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
+      ${td(p.house, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`, "votes")}
+      ${td(p.house, (r) => formatSeats(r.seats))}
+      ${td(p.house, (r) => formatGap(r.gap), "gap")}
+      ${td(p.house, (r) => formatSeatGap(r.seatGap), "gap")}
+      ${td(p.house, (r) => (r.uncontested ? String(r.uncontested) : ""))}
+      ${td(p.senate, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`, "votes")}
       <td style="text-align:left">${cell(p.senate, () => escapeHtml(senateWinners(p.senateRaces)))}</td>
-      <td>${cell(p.president, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`)}</td>
-      <td>${cell(p.president, (r) => `${formatSeats(r.seats)} <span class="muted">${escapeHtml(presWinner)}</span>`)}</td>
-      <td>${cell(p.statehouse, legislatureVotes)}</td>
-      <td>${cell(p.statehouse, (r) => formatSeats(r.seats))}</td>
-      <td>${cell(p.statehouse, legislatureGap)}</td>
-      <td>${cell(p.statesenate, legislatureVotes)}</td>
-      <td>${cell(p.statesenate, (r) => formatSeats(r.seats))}</td>
-      <td>${cell(p.statesenate, legislatureGap)}</td>
+      ${td(p.president, (r) => `${pct(r.voteShare.D)} / ${pct(r.voteShare.R)}`, "votes")}
+      ${td(p.president, (r) => `${formatSeats(r.seats)} <span class="muted">${escapeHtml(presWinner)}</span>`)}
+      ${td(p.statehouse, legislatureVotes, "votes")}
+      ${td(p.statehouse, (r) => formatSeats(r.seats))}
+      ${td(p.statehouse, legislatureGap, "gap")}
+      ${td(p.statesenate, legislatureVotes, "votes")}
+      ${td(p.statesenate, (r) => formatSeats(r.seats))}
+      ${td(p.statesenate, legislatureGap, "gap")}
     </tr>`;
   }).join("");
   box.innerHTML = `<div class="table-wrap"><table>

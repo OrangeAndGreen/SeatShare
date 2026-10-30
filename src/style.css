@@ -11,6 +11,10 @@
   --rep: #e34948;
   --rep-strong: #a32b2b;
   --ind: #8a8984;
+  /* Table cells shade from the panel at even to these at the widest spreads. */
+  --dem-cell: #184f95;
+  --rep-cell: #a32b2b;
+  --shade-ink: #ffffff;
   --focus: #2a78d6;
   --office-house: #6250d6;
   --office-senate: #eb6834;
@@ -34,6 +38,9 @@
     --rep: #e66767;
     --rep-strong: #f2a3a3;
     --ind: #9c9b94;
+    --dem-cell: #1d5aa8;
+    --rep-cell: #a83434;
+    --shade-ink: var(--text);
     --focus: #86b6ef;
     --office-house: #9085e9;
     --office-senate: #d95926;
@@ -57,6 +64,9 @@
   --rep: #e66767;
   --rep-strong: #f2a3a3;
   --ind: #9c9b94;
+  --dem-cell: #1d5aa8;
+  --rep-cell: #a83434;
+  --shade-ink: var(--text);
   --focus: #86b6ef;
   --office-house: #9085e9;
   --office-senate: #d95926;
